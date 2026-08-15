@@ -13,6 +13,7 @@ import 'package:hydrocalc/widgets/discharge_input_card.dart';
 import '../services/freeflow_service.dart';
 import '../widgets/radial_gate_card.dart';
 import 'package:hydrocalc/services/whatsapp_report_service.dart';
+import 'package:http/http.dart' as http;
 
 class HourlyCalculatorScreen extends StatefulWidget {
   const HourlyCalculatorScreen({super.key});
@@ -79,7 +80,7 @@ String finalConcDateTime = "$concDateStr (${concTimeStr}Hrs)";
                   rg2Discharge: rg2Discharge,
                   rg3Discharge: rg3Discharge,
                   fdrgDischarge: fdrg,
-                  sftDischarge: sft,
+                  sftDischarge: sft+sft,
                   fishPassDischarge: fishpassChannel + fishpassPipe,
                   eflowPipeDischarge: eflow,
                   finalConcDateTime: finalConcDateTime, // Pass the formatted concentration date and time
@@ -166,7 +167,8 @@ String finalConcDateTime = "$concDateStr (${concTimeStr}Hrs)";
   final fishpassPipeController = TextEditingController();
   final fishpassChannelController = TextEditingController();
   final eflowController = TextEditingController();
-  final sftController = TextEditingController();
+  final sft1Controller = TextEditingController();
+  final sft2Controller = TextEditingController();
   final fdrgController = TextEditingController();
   
   final rg1FreeflowOpeningController = TextEditingController();
@@ -186,6 +188,7 @@ String finalConcDateTime = "$concDateStr (${concTimeStr}Hrs)";
   double fishpassChannel = 0.0;
   double eflow = 0.0;
   double sft = 0.0;
+
   double fdrg = 0.0;
 
   double calculateRadialGateDischarge(
@@ -224,7 +227,8 @@ String finalConcDateTime = "$concDateStr (${concTimeStr}Hrs)";
   bool fishpassPipeAuto = false;
   bool fishpassChannelAuto = false;
   bool eflowAuto = false;
-  bool sftAuto = false;
+  bool sft1Auto = false;
+  bool sft2Auto = false;
 
   @override
   void dispose() {
@@ -245,7 +249,8 @@ String finalConcDateTime = "$concDateStr (${concTimeStr}Hrs)";
     fishpassPipeController.dispose();
     fishpassChannelController.dispose();
     eflowController.dispose();
-    sftController.dispose();
+    sft1Controller.dispose();
+    sft2Controller.dispose();
     fdrgController.dispose();
     rg1FreeflowOpeningController.dispose();
     rg2FreeflowOpeningController.dispose();
@@ -322,15 +327,24 @@ String finalConcDateTime = "$concDateStr (${concTimeStr}Hrs)";
       eflow = double.tryParse(eflowController.text) ?? 0;
     }
     
-    if (sftAuto) {
+    if (sft1Auto) {
       sft = SFTService.getDischarge(
         waterLevel: gateReservoirLevel,
-        gateOpeningMm: double.tryParse(sftController.text) ?? 0,
+        gateOpeningMm: double.tryParse(sft1Controller.text) ?? 0,
       );
     } else {
-      sft = double.tryParse(sftController.text) ?? 0;
+      sft = double.tryParse(sft1Controller.text) ?? 0;
     }
-    
+
+    if (sft2Auto) {
+      sft = SFTService.getDischarge(
+        waterLevel: gateReservoirLevel,
+        gateOpeningMm: double.tryParse(sft2Controller.text) ?? 0,
+      );
+    } else {
+      sft = double.tryParse(sft2Controller.text) ?? 0;
+    }
+
     fdrg = FDRGService.getDischarge(
       gateOpeningMm: double.tryParse(fdrgController.text) ?? 0,
     );
@@ -344,6 +358,7 @@ String finalConcDateTime = "$concDateStr (${concTimeStr}Hrs)";
         fishpassPipe +
         fishpassChannel +
         eflow +
+        sft+
         sft +
         fdrg;
         
@@ -360,55 +375,82 @@ String finalConcDateTime = "$concDateStr (${concTimeStr}Hrs)";
     setState(() {});
   }
 
-  Future<void> saveReading() async {
-    final prefs = await SharedPreferences.getInstance();
-    List<String> readings = prefs.getStringList('hourly_readings') ?? [];
-    final now = DateTime.now();
+Future<void> saveReading() async {
+  final prefs = await SharedPreferences.getInstance();
+  List<String> readings = prefs.getStringList('hourly_readings') ?? [];
+  final now = DateTime.now();
 
-    final reading = {
-      "date": "${now.day.toString().padLeft(2, '0')}-"
-          "${now.month.toString().padLeft(2, '0')}-"
-          "${now.year}",
-      "time": "${now.hour.toString().padLeft(2, '0')}:"
-          "${now.minute.toString().padLeft(2, '0')}",
-      "currentLevel": currentLevelController.text,
-      "barrageOutflow": barrageWaterRelease.toStringAsFixed(2),
-      "totalOutflow": totalOutflowDischarge.toStringAsFixed(2),
-      "inflow": inflowDischarge.toStringAsFixed(2),
-    };
+  String hourlyTimeString = "${selectedTime.hour.toString().padLeft(2, '0')}:00";
 
-    readings.add(jsonEncode(reading));
-    await prefs.setStringList('hourly_readings', readings);
+  final reading = {
+    "date": "${now.day.toString().padLeft(2, '0')}-${now.month.toString().padLeft(2, '0')}-${now.year}",
+    "time": hourlyTimeString,
+    "currentLevel": currentLevelController.text,
+    "avgLoad": loadController.text,
+    "powerHouseDischarge": powerHouseDischarge.toStringAsFixed(2),
+    "rg1": rg1Discharge.toStringAsFixed(2),
+    "rg2": rg2Discharge.toStringAsFixed(2),
+    "rg3": rg3Discharge.toStringAsFixed(2),
+    "sft1": sft.toStringAsFixed(2),
+    "sft2": sft.toStringAsFixed(2),
+    "eflow": eflow.toStringAsFixed(2),
+    "fdrg": fdrg.toStringAsFixed(2),
+    "barrageOutflow": barrageWaterRelease.toStringAsFixed(2),
+    "totalOutflow": totalOutflowDischarge.toStringAsFixed(2),
+    "inflow": inflowDischarge.toStringAsFixed(2),
+  };
 
-    if (!mounted) return;
+  // 1. Save locally to SharedPreferences
+  readings.add(jsonEncode(reading));
+  await prefs.setStringList('hourly_readings', readings);
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Reading Saved Successfully")),
+  // 2. Export/Sync directly to Google Sheet via GET parameters
+  try {
+    // PASTE YOUR LATEST DEPLOYMENT URL BELOW
+    final uri = Uri.parse("https://script.google.com/macros/s/AKfycbxyd30kmNaKX-BzRx187Rf7Si4hGgA9qdIxUgvUOw9xOW0letGpOCVTxpH2en9ALAXo4A/exec").replace(
+      queryParameters: reading.map((key, value) => MapEntry(key, value.toString())),
     );
+
+    final response = await http.get(uri);
+    
+    if (response.statusCode == 200) {
+      debugPrint("Successfully synced to Google Sheet!");
+    } else {
+      debugPrint("Sync failed with status code: ${response.statusCode}");
+    }
+  } catch (e) {
+    debugPrint("Google Sheet sync failed: $e");
   }
 
-  Widget sectionTitle(String text) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Text(
-        text,
-        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-      ),
-    );
-  }
+  if (!mounted) return;
 
-  Widget resultRow(String title, double value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(title),
-          Text("${(value ?? 0.0).toStringAsFixed(2)} m³/s"),
-        ],
-      ),
-    );
-  }
+  ScaffoldMessenger.of(context).showSnackBar(
+    const SnackBar(content: Text("Reading Saved Successfully & Synced!")),
+  );
+}
+
+Widget sectionTitle(String text) {
+  return Padding(
+    padding: const EdgeInsets.only(bottom: 12),
+    child: Text(
+      text,
+      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+    ),
+  );
+}
+
+Widget resultRow(String title, double value) {
+  return Padding(
+    padding: const EdgeInsets.symmetric(vertical: 4),
+    child: Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(title),
+        Text("${value.toStringAsFixed(2)} m³/s"),
+      ],
+    ),
+  );
+}
 
   @override
   Widget build(BuildContext context) {
@@ -475,7 +517,7 @@ String finalConcDateTime = "$concDateStr (${concTimeStr}Hrs)";
 Padding(
   padding: const EdgeInsets.symmetric(vertical: 10),
   child: DropdownButtonFormField<String>(
-    value: selectedWeather,
+    initialValue: selectedWeather,
     decoration: const InputDecoration(
       labelText: "Weather Condition",
       border: OutlineInputBorder(),
@@ -658,10 +700,10 @@ Padding(
               children: [
                 Expanded(
                   child: InputField(
-                    label: sftAuto
-                        ? "SFT Gate Opening (mm)"
-                        : "SFT Discharge (m³/s)",
-                    controller: sftController,
+                    label: sft1Auto
+                        ? "SFT-1 Gate Opening (mm)"
+                        : "SFT-1 Discharge (m³/s)",
+                    controller: sft1Controller,
                     readOnly: false,
                     onChanged: (value) {
                       calculateDischarge();
@@ -673,10 +715,41 @@ Padding(
                   children: [
                     const Text("Auto"),
                     Switch(
-                      value: sftAuto,
+                      value: sft1Auto,
                       onChanged: (value) {
                         setState(() {
-                          sftAuto = value;
+                          sft1Auto = value;
+                        });
+                        calculateDischarge();
+                      },
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            Row(
+              children: [
+                Expanded(
+                  child: InputField(
+                    label: sft2Auto
+                        ? "SFT-2 Gate Opening (mm)"
+                        : "SFT-2 Discharge (m³/s)",
+                    controller: sft2Controller,
+                    readOnly: false,
+                    onChanged: (value) {
+                      calculateDischarge();
+                    },
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Column(
+                  children: [
+                    const Text("Auto"),
+                    Switch(
+                      value: sft2Auto,
+                      onChanged: (value) {
+                        setState(() {
+                          sft2Auto = value;
                         });
                         calculateDischarge();
                       },
@@ -800,9 +873,18 @@ const SizedBox(height: 15),
                       "TOTAL FISHPASS DISCHARGE",
                       fishpassChannel + fishpassPipe,
                     ),
+                    
                     const Divider(),
                     resultRow("E-FLOW DISCHARGE", eflow),
-                    resultRow("SFT DISCHARGE", sft),
+                    const Divider(),
+                    resultRow("SFT-1 DISCHARGE", sft),
+                    resultRow("SFT-2 DISCHARGE", sft),
+                     const Divider(),
+                     resultRow(
+                      "TOTAL SFT DISCHARGE",
+                      sft + sft,
+                    ),
+                     const Divider(),
                     resultRow("FDRG Discharge", fdrg),
                     const Divider(),
                     resultRow("Desilting Level Difference", desiltingLevelDifference),

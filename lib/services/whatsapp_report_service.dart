@@ -46,10 +46,10 @@ SFT 1&2 : ${sftDischarge.toStringAsFixed(2)} Cumecs
 Fish Pass : ${fishPassDischarge.toStringAsFixed(2)} cumecs
 E Flow pipe : ${eflowPipeDischarge.toStringAsFixed(2)} cumecs
 🔹Last Year Maximum Discharge for the Month of August '2025 = 776.91 cumecs
-🔹Visual Debris Near Trash Rack: * * 
+🔹Visual Debris Near Trash Rack: ** 
 🔹Last Silt Sample Taken : Barrage 
 *$finalConcDateTime*
-🔹Concentration:  * ${concentrationController.text} ppm* 
+🔹Concentration:  *${concentrationController.text} ppm* 
 ◇Weather : *$weather*''';
   }
 
@@ -68,13 +68,13 @@ E Flow pipe : ${eflowPipeDischarge.toStringAsFixed(2)} cumecs
     return '''*Naitwar Mori Hydro Power Station* *(SJVN)* *(2x30=60MW)*
 *Location: Barrage* *(FRL 1267.00)* 
 Date: *$dateStr*
-*Time - ${time} Hrs*
+*Time - $time Hrs*
 
 1. *River Discharge Cumecs - ${riverDischarge.toStringAsFixed(2)}*
 2. *Discharge (from gates, valves i/c, Fish pass) from Barrage - ${totalBarrageOutflow.toStringAsFixed(2)} cumecs*
 3. *Discharge passing through machine - ${powerhouseDischarge.toStringAsFixed(2)} Cumecs* 
 4. *Barrage Level - ${reservoirLevel.toStringAsFixed(2)} m* 
-5. *Weather - *$weather*''';
+5. *Weather - $weather*''';
   }
 
   // Format 3
@@ -90,7 +90,7 @@ Date: *$dateStr*
 
     return '''1. Site: Naitwar Mori HPS (SJVN)
 2. Date: *$dateStr*
-3. Time: *${time} hrs*
+3. Time: *$time hrs*
 4. River: Tons
 5. Upstream River Level: *${reservoirLevel.toStringAsFixed(2)}m*
 6. Full Reservoir Level (As per Design): 1267.00m

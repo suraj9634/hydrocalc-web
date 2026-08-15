@@ -165,7 +165,7 @@ class SFTService {
       upperResult,
     );
 
-    return singleSFT * 2;
+    return singleSFT ;
   }
 
 }

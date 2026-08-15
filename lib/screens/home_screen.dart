@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'hourly_calculator_screen.dart';
+import 'history_screen.dart';
 
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
@@ -53,14 +54,22 @@ class HomePage extends StatelessWidget {
 
             const SizedBox(height: 15),
 
-            SizedBox(
-              width: double.infinity,
-              height: 55,
-              child: ElevatedButton(
-                onPressed: () {},
-                child: const Text("History"),
+           SizedBox(
+            width: double.infinity,
+            height: 55,
+          child: ElevatedButton(
+            onPressed: () {
+            Navigator.push(
+            context,
+           MaterialPageRoute(builder: (context) => const HistoryScreen()),
+             );
+              },
+             child: const Text(
+              "History",
+              style: TextStyle(fontSize: 18),
+             ),
               ),
-            ),
+              ),
 
             const SizedBox(height: 15),
 
