@@ -378,12 +378,12 @@ String finalConcDateTime = "$concDateStr (${concTimeStr}Hrs)";
 Future<void> saveReading() async {
   final prefs = await SharedPreferences.getInstance();
   List<String> readings = prefs.getStringList('hourly_readings') ?? [];
-  final now = DateTime.now();
 
   String hourlyTimeString = "${selectedTime.hour.toString().padLeft(2, '0')}:00";
 
+  // FIXED: Using selectedDate instead of DateTime.now() for the date string
   final reading = {
-    "date": "${now.day.toString().padLeft(2, '0')}-${now.month.toString().padLeft(2, '0')}-${now.year}",
+    "date": "${selectedDate.day.toString().padLeft(2, '0')}-${selectedDate.month.toString().padLeft(2, '0')}-${selectedDate.year}",
     "time": hourlyTimeString,
     "currentLevel": currentLevelController.text,
     "avgLoad": loadController.text,
@@ -399,6 +399,8 @@ Future<void> saveReading() async {
     "totalOutflow": totalOutflowDischarge.toStringAsFixed(2),
     "inflow": inflowDischarge.toStringAsFixed(2),
   };
+  
+  // Rest of your save/sync code...
 
   // 1. Save locally to SharedPreferences
   readings.add(jsonEncode(reading));
