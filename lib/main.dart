@@ -1,16 +1,8 @@
 import 'package:flutter/material.dart';
-import 'screens/home_screen.dart';
+import 'screens/login_screen.dart'; // Make sure this points to your login screen
 
-void main() async {
-  // 1. Add this print statement to see if Dart is executing
-  
-  debugPrint("DEBUG: main() function has started!");
-
-  // 2. This is REQUIRED if you have 'async' in main or initialize services here
-  WidgetsFlutterBinding.ensureInitialized(); 
-
-  // (Your other initialization code if any)
-
+void main() {
+  WidgetsFlutterBinding.ensureInitialized();
   runApp(const HydroCalcApp());
 }
 
@@ -20,12 +12,13 @@ class HydroCalcApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      title: 'Barrage Management System',
       debugShowCheckedModeBanner: false,
-      title: 'HydroCalc Pro',
       theme: ThemeData(
-        primarySwatch: Colors.blue,
+        useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF1E3A8A)),
       ),
-      home: const HomePage(),
+      home: const LoginScreen(), // This ensures the app starts at the Login Screen!
     );
   }
 }

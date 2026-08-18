@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
@@ -25,16 +27,17 @@ class HourlyCalculatorScreen extends StatefulWidget {
 }
 
 class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
-      
   @override
   void initState() {
     super.initState();
-    // Automatically attempt to flush the offline queue when the screen loads
     syncPendingQueue();
+    _startHourlyAlarmChecker(); // Starts checking the system time every 30 seconds
   }
 
-  DateTime selectedDate = DateTime.now(); 
-  TimeOfDay selectedTime = TimeOfDay.now(); 
+  Timer? _hourlyCheckTimer;
+  int _lastAlertedHour = -1;
+  DateTime selectedDate = DateTime.now();
+  TimeOfDay selectedTime = TimeOfDay.now();
   DateTime concentrationDate = DateTime.now();
   TimeOfDay concentrationTime = TimeOfDay.now();
 
@@ -47,17 +50,21 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
     return slots;
   }
 
-  String selectedWeather = 'cloudy'; 
+  String selectedWeather = 'cloudy';
 
   void _showWhatsAppReportDialog(BuildContext context) {
-    String hourlyTimeString = "${selectedTime.hour.toString().padLeft(2, '0')}:00";
-    String concDateStr = "${concentrationDate.day.toString().padLeft(2, '0')}-${concentrationDate.month.toString().padLeft(2, '0')}-${concentrationDate.year}";
-    String concTimeStr = "${concentrationTime.hour.toString().padLeft(2, '0')}:${concentrationTime.minute.toString().padLeft(2, '0')}";
+    String hourlyTimeString =
+        "${selectedTime.hour.toString().padLeft(2, '0')}:00";
+    String concDateStr =
+        "${concentrationDate.day.toString().padLeft(2, '0')}-${concentrationDate.month.toString().padLeft(2, '0')}-${concentrationDate.year}";
+    String concTimeStr =
+        "${concentrationTime.hour.toString().padLeft(2, '0')}:${concentrationTime.minute.toString().padLeft(2, '0')}";
     String finalConcDateTime = "$concDateStr (${concTimeStr}Hrs)";
-    
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text("Select WhatsApp Report"),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -71,8 +78,10 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
                 String report = WhatsappReportService.formatReport1(
                   date: selectedDate,
                   time: hourlyTimeString,
-                  reservoirLevel: double.tryParse(currentLevelController.text) ?? 0.0,
-                  desiltingLevel: double.tryParse(desiltingLevelController.text) ?? 0.0,
+                  reservoirLevel:
+                      double.tryParse(currentLevelController.text) ?? 0.0,
+                  desiltingLevel:
+                      double.tryParse(desiltingLevelController.text) ?? 0.0,
                   downstreamLevel: 0.0,
                   netHeadLoss: desiltingLevelDifference,
                   averageHourlyLoad: double.tryParse(loadController.text) ?? 0.0,
@@ -82,7 +91,7 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
                   rg2Discharge: rg2Discharge,
                   rg3Discharge: rg3Discharge,
                   fdrgDischarge: fdrg,
-                  sftDischarge: sft+sft,
+                  sftDischarge: sft + sft,
                   fishPassDischarge: fishpassChannel + fishpassPipe,
                   eflowPipeDischarge: eflow,
                   finalConcDateTime: finalConcDateTime,
@@ -94,18 +103,22 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
             ),
             const Divider(),
             ListTile(
-              leading: const Icon(Icons.water_drop_outlined, color: Colors.blue),
-              title: const Text("Format 2: UPSTREAM & DOWNSTREAM DISCHARGE REPORT"),
-              subtitle: const Text("River discharge, outflow, machine discharge"),
+              leading:
+                  const Icon(Icons.water_drop_outlined, color: Colors.blue),
+              title:
+                  const Text("Format 2: UPSTREAM & DOWNSTREAM DISCHARGE REPORT"),
+              subtitle:
+                  const Text("River discharge, outflow, machine discharge"),
               onTap: () {
                 Navigator.pop(context);
                 String report2 = WhatsappReportService.formatReport2(
                   date: selectedDate,
                   time: hourlyTimeString,
-                  riverDischarge: inflowDischarge, 
-                  totalBarrageOutflow: barrageWaterRelease, 
-                  powerhouseDischarge: powerHouseDischarge, 
-                  reservoirLevel: double.tryParse(currentLevelController.text) ?? 0.0,
+                  riverDischarge: inflowDischarge,
+                  totalBarrageOutflow: barrageWaterRelease,
+                  powerhouseDischarge: powerHouseDischarge,
+                  reservoirLevel:
+                      double.tryParse(currentLevelController.text) ?? 0.0,
                   weather: selectedWeather,
                 );
                 _copyToClipboard(context, report2, "Format 2");
@@ -121,9 +134,10 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
                 String report3 = WhatsappReportService.formatReport3(
                   date: selectedDate,
                   time: hourlyTimeString,
-                  reservoirLevel: double.tryParse(currentLevelController.text) ?? 0.0,
-                  inflow: inflowDischarge, 
-                  barrageOutflow: barrageWaterRelease, 
+                  reservoirLevel:
+                      double.tryParse(currentLevelController.text) ?? 0.0,
+                  inflow: inflowDischarge,
+                  barrageOutflow: barrageWaterRelease,
                   weather: selectedWeather,
                 );
                 _copyToClipboard(context, report3, "Format 3");
@@ -139,7 +153,8 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
     Clipboard.setData(ClipboardData(text: text));
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text("$formatName copied to clipboard! Ready to paste in WhatsApp."),
+        content: Text(
+            "$formatName copied to clipboard! Ready to paste in WhatsApp."),
         backgroundColor: Colors.green,
       ),
     );
@@ -154,7 +169,7 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
   final rg1Controller = TextEditingController();
   final rg2Controller = TextEditingController();
   final rg3Controller = TextEditingController();
-  
+
   final rg1GatedMinsController = TextEditingController(text: "60");
   final rg1FreeflowMinsController = TextEditingController(text: "0");
   final rg2GatedMinsController = TextEditingController(text: "60");
@@ -168,7 +183,7 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
   final sft1Controller = TextEditingController();
   final sft2Controller = TextEditingController();
   final fdrgController = TextEditingController();
-  
+
   final rg1FreeflowOpeningController = TextEditingController();
   final rg2FreeflowOpeningController = TextEditingController();
   final rg3FreeflowOpeningController = TextEditingController();
@@ -191,17 +206,17 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
   double calculateRadialGateDischarge(
     TextEditingController openingCtrl,
     TextEditingController gatedMinsCtrl,
-    TextEditingController freeflowOpeningCtrl, 
+    TextEditingController freeflowOpeningCtrl,
     TextEditingController freeflowMinsCtrl,
     double reservoirLevel,
   ) {
     double openingMm = double.tryParse(openingCtrl.text) ?? 0.0;
     int gatedMins = int.tryParse(gatedMinsCtrl.text) ?? 0;
-    double freeflowOpeningMm = double.tryParse(freeflowOpeningCtrl.text) ?? 0.0; 
+    double freeflowOpeningMm = double.tryParse(freeflowOpeningCtrl.text) ?? 0.0;
     int freeflowMins = int.tryParse(freeflowMinsCtrl.text) ?? 0;
 
     if (gatedMins + freeflowMins > 60) {
-      return 0.0; 
+      return 0.0;
     }
 
     double gatedDischarge = GateRatingService.getDischarge(
@@ -210,12 +225,14 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
     );
 
     double freeflowDischarge = FreeflowService.getDischarge(
-      gateOpeningMm: freeflowOpeningMm, 
+      gateOpeningMm: freeflowOpeningMm,
     );
 
-    return ((gatedDischarge * gatedMins) + (freeflowDischarge * freeflowMins)) / 60.0;
+    return ((gatedDischarge * gatedMins) +
+            (freeflowDischarge * freeflowMins)) /
+        60.0;
   }
-  
+
   double barrageWaterRelease = 0.0;
   double totalOutflowDischarge = 0.0;
   double inflowDischarge = 0.0;
@@ -228,6 +245,7 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
 
   @override
   void dispose() {
+    _hourlyCheckTimer?.cancel();
     previousLevelController.dispose();
     currentLevelController.dispose();
     desiltingLevelController.dispose();
@@ -250,7 +268,7 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
     fdrgController.dispose();
     rg1FreeflowOpeningController.dispose();
     rg2FreeflowOpeningController.dispose();
-    rg3FreeflowOpeningController.dispose();   
+    rg3FreeflowOpeningController.dispose();
     concentrationController.dispose();
     super.dispose();
   }
@@ -263,16 +281,17 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
 
     desiltingLevelDifference = (currentLevel - desiltingLevel);
 
-    double gateReservoirLevel = double.tryParse(reservoirLevelController.text) ?? 0;
-    
+    double gateReservoirLevel =
+        double.tryParse(reservoirLevelController.text) ?? 0;
+
     if (gateReservoirLevel < 1263) {
       factorF = 9.06;
     } else if (gateReservoirLevel == 1263) {
-      factorF = (9.06 + 11.74) / 2; 
+      factorF = (9.06 + 11.74) / 2;
     } else if (gateReservoirLevel < 1265) {
       factorF = 11.74;
     } else if (gateReservoirLevel == 1265) {
-      factorF = (11.74 + 15.25) / 2; 
+      factorF = (11.74 + 15.25) / 2;
     } else {
       factorF = 15.25;
     }
@@ -290,17 +309,27 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
     powerHouseDischarge = divisor == 0 ? 0 : load / divisor;
 
     rg1Discharge = calculateRadialGateDischarge(
-      rg1Controller, rg1GatedMinsController, rg1FreeflowOpeningController, rg1FreeflowMinsController, gateReservoirLevel
-    );
+        rg1Controller,
+        rg1GatedMinsController,
+        rg1FreeflowOpeningController,
+        rg1FreeflowMinsController,
+        gateReservoirLevel);
     rg2Discharge = calculateRadialGateDischarge(
-      rg2Controller, rg2GatedMinsController, rg2FreeflowOpeningController, rg2FreeflowMinsController, gateReservoirLevel
-    );
+        rg2Controller,
+        rg2GatedMinsController,
+        rg2FreeflowOpeningController,
+        rg2FreeflowMinsController,
+        gateReservoirLevel);
     rg3Discharge = calculateRadialGateDischarge(
-      rg3Controller, rg3GatedMinsController, rg3FreeflowOpeningController, rg3FreeflowMinsController, gateReservoirLevel
-    );
+        rg3Controller,
+        rg3GatedMinsController,
+        rg3FreeflowOpeningController,
+        rg3FreeflowMinsController,
+        gateReservoirLevel);
 
     if (fishpassPipeAuto) {
-      fishpassPipe = FishpassPipeService.getDischarge(reservoirLevel: gateReservoirLevel);
+      fishpassPipe =
+          FishpassPipeService.getDischarge(reservoirLevel: gateReservoirLevel);
       if (fishpassPipeController.text != fishpassPipe.toStringAsFixed(2)) {
         fishpassPipeController.text = fishpassPipe.toStringAsFixed(2);
       }
@@ -309,7 +338,8 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
     }
 
     if (fishpassChannelAuto) {
-      fishpassChannel = FishpassChannelService.getDischarge(reservoirLevel: gateReservoirLevel);
+      fishpassChannel =
+          FishpassChannelService.getDischarge(reservoirLevel: gateReservoirLevel);
       fishpassChannelController.text = fishpassChannel.toStringAsFixed(2);
     } else {
       fishpassChannel = double.tryParse(fishpassChannelController.text) ?? 0;
@@ -321,7 +351,7 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
     } else {
       eflow = double.tryParse(eflowController.text) ?? 0;
     }
-    
+
     if (sft1Auto) {
       sft = SFTService.getDischarge(
         waterLevel: gateReservoirLevel,
@@ -356,7 +386,7 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
         sft +
         sft +
         fdrg;
-        
+
     totalOutflowDischarge = powerHouseDischarge + barrageWaterRelease;
 
     if (current > previous) {
@@ -366,7 +396,7 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
     } else {
       inflowDischarge = totalOutflowDischarge;
     }
-    
+
     setState(() {});
   }
 
@@ -375,10 +405,12 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
     List<String> readings = prefs.getStringList('hourly_readings') ?? [];
     List<String> pendingQueue = prefs.getStringList('pending_sync_queue') ?? [];
 
-    String hourlyTimeString = "${selectedTime.hour.toString().padLeft(2, '0')}:00";
+    String hourlyTimeString =
+        "${selectedTime.hour.toString().padLeft(2, '0')}:00";
 
     final reading = {
-      "date": "${selectedDate.day.toString().padLeft(2, '0')}-${selectedDate.month.toString().padLeft(2, '0')}-${selectedDate.year}",
+      "date":
+          "${selectedDate.day.toString().padLeft(2, '0')}-${selectedDate.month.toString().padLeft(2, '0')}-${selectedDate.year}",
       "time": hourlyTimeString,
       "currentLevel": currentLevelController.text,
       "avgLoad": loadController.text,
@@ -395,11 +427,9 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
       "inflow": inflowDischarge.toStringAsFixed(2),
     };
 
-    // Save locally first so it's never lost
     readings.add(jsonEncode(reading));
     await prefs.setStringList('hourly_readings', readings);
 
-    // Check internet connectivity
     var connectivityResult = await (Connectivity().checkConnectivity());
     bool isConnected = !connectivityResult.contains(ConnectivityResult.none);
 
@@ -419,7 +449,9 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(isConnected ? "Reading Saved & Synced!" : "Offline: Saved Locally & Queued for Sync!"),
+        content: Text(isConnected
+            ? "Reading Saved & Synced!"
+            : "Offline: Saved Locally & Queued for Sync!"),
         backgroundColor: isConnected ? Colors.green : Colors.orange,
       ),
     );
@@ -445,7 +477,7 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
     }
 
     await prefs.setStringList('pending_sync_queue', stillPending);
-    
+
     if (stillPending.length < pendingQueue.length) {
       debugPrint("Successfully synced offline queue items to Google Sheets!");
     }
@@ -453,8 +485,11 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
 
   Future<bool> _sendToGoogleSheet(Map<String, dynamic> reading) async {
     try {
-      final uri = Uri.parse("https://script.google.com/macros/s/AKfycbxyd30kmNaKX-BzRx187Rf7Si4hGgA9qdIxUgvUOw9xOW0letGpOCVTxpH2en9ALAXo4A/exec").replace(
-        queryParameters: reading.map((key, value) => MapEntry(key, value.toString())),
+      final uri = Uri.parse(
+              "https://script.google.com/macros/s/AKfycbxyd30kmNaKX-BzRx187Rf7Si4hGgA9qdIxUgvUOw9xOW0letGpOCVTxpH2en9ALAXo4A/exec")
+          .replace(
+        queryParameters:
+            reading.map((key, value) => MapEntry(key, value.toString())),
       );
 
       final response = await http.get(uri);
@@ -467,12 +502,57 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
 
   Widget sectionTitle(String text) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(vertical: 12),
       child: Text(
         text,
-        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+        style: const TextStyle(
+          fontSize: 20,
+          fontWeight: FontWeight.bold,
+          color: Color(0xFF1E3A8A),
+        ),
       ),
     );
+  }
+
+  void _startHourlyAlarmChecker() {
+    _hourlyCheckTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
+      final now = DateTime.now();
+      if (now.minute == 0 && now.hour != _lastAlertedHour) {
+        _lastAlertedHour = now.hour;
+        _triggerHourlyAlert();
+      }
+    });
+  }
+
+  void _triggerHourlyAlert() {
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.alarm, color: Colors.orange, size: 30),
+            SizedBox(width: 10),
+            Text("Hourly Log Reminder!"),
+          ],
+        ),
+        content: Text(
+          "It is now ${nowFormattedHour()}. Time to record and save the hourly barrage reading!",
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("OK, Logging Now"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String nowFormattedHour() {
+    final now = DateTime.now();
+    return "${now.hour.toString().padLeft(2, '0')}:00 Hrs";
   }
 
   Widget resultRow(String title, double value) {
@@ -492,67 +572,101 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Hourly Calculator"),
+        title: const Text("Hourly Calculator",
+            style: TextStyle(fontWeight: FontWeight.bold)),
         centerTitle: true,
+        backgroundColor: const Color(0xFF1E3A8A),
+        foregroundColor: Colors.white,
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: TextButton.icon(
-                    icon: const Icon(Icons.calendar_today),
-                    label: Text("${selectedDate.toLocal()}".split(' ')[0]),
-                    onPressed: () async {
-                      DateTime? pickedDate = await showDatePicker(
-                        context: context,
-                        initialDate: selectedDate,
-                        firstDate: DateTime(2025),
-                        lastDate: DateTime(2030),
-                      );
-                      if (pickedDate != null) {
-                        setState(() {
-                          selectedDate = pickedDate;
-                        });
-                      }
-                    },
-                  ),
+            // Top Clean Header Card
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF0F2027), Color(0xFF203A43), Color(0xFF2C5364)],
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: DropdownButton<String>(
-                    value: _generateHourlyTimeSlots().contains("${selectedTime.hour.toString().padLeft(2, '0')}:00") 
-                        ? "${selectedTime.hour.toString().padLeft(2, '0')}:00" 
-                        : "00:00",
-                    isExpanded: true,
-                    items: _generateHourlyTimeSlots().map((String timeSlot) {
-                      return DropdownMenuItem<String>(
-                        value: timeSlot,
-                        child: Text("$timeSlot Hrs"),
-                      );
-                    }).toList(),
-                    onChanged: (String? newTime) {
-                      if (newTime != null) {
-                        final parts = newTime.split(':');
-                        setState(() {
-                          selectedTime = TimeOfDay(
-                            hour: int.parse(parts[0]),
-                            minute: 0,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.analytics, color: Colors.white, size: 32),
+                  SizedBox(width: 16),
+                  Expanded(
+                    child: Text(
+                      "Enter hourly parameters for discharge & head computation.",
+                      style: TextStyle(color: Colors.white70, fontSize: 13),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextButton.icon(
+                        icon: const Icon(Icons.calendar_today),
+                        label: Text("${selectedDate.toLocal()}".split(' ')[0]),
+                        onPressed: () async {
+                          DateTime? pickedDate = await showDatePicker(
+                            context: context,
+                            initialDate: selectedDate,
+                            firstDate: DateTime(2025),
+                            lastDate: DateTime(2030),
                           );
-                        });
-                      }
-                    },
-                  ),
+                          if (pickedDate != null) {
+                            setState(() {
+                              selectedDate = pickedDate;
+                            });
+                          }
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: DropdownButton<String>(
+                        value: _generateHourlyTimeSlots().contains(
+                                "${selectedTime.hour.toString().padLeft(2, '0')}:00")
+                            ? "${selectedTime.hour.toString().padLeft(2, '0')}:00"
+                            : "00:00",
+                        isExpanded: true,
+                        items:
+                            _generateHourlyTimeSlots().map((String timeSlot) {
+                          return DropdownMenuItem<String>(
+                            value: timeSlot,
+                            child: Text("$timeSlot Hrs"),
+                          );
+                        }).toList(),
+                        onChanged: (String? newTime) {
+                          if (newTime != null) {
+                            final parts = newTime.split(':');
+                            setState(() {
+                              selectedTime = TimeOfDay(
+                                hour: int.parse(parts[0]),
+                                minute: 0,
+                              );
+                            });
+                          }
+                        },
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 10),
               child: DropdownButtonFormField<String>(
-                initialValue: selectedWeather,
+                value: selectedWeather,
                 decoration: const InputDecoration(
                   labelText: "Weather Condition",
                   border: OutlineInputBorder(),
@@ -561,7 +675,8 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
                   DropdownMenuItem(value: 'Clear', child: Text("clear ☀️")),
                   DropdownMenuItem(value: 'cloudy', child: Text("Cloudy ☁️")),
                   DropdownMenuItem(value: 'rainy', child: Text("Rainy 🌧️")),
-                  DropdownMenuItem(value: 'heavy rainy', child: Text("heavy rainy ⛈️")),
+                  DropdownMenuItem(
+                      value: 'heavy rainy', child: Text("heavy rainy ⛈️")),
                 ],
                 onChanged: (String? newWeather) {
                   if (newWeather != null) {
@@ -573,29 +688,38 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
               ),
             ),
             sectionTitle("Reservoir Levels"),
-            InputField(
-              label: "Previous Reservoir Level (m)",
-              controller: previousLevelController,
-            ),
-            const SizedBox(height: 15),
-            InputField(
-              label: "Current Reservoir Level (m)",
-              controller: currentLevelController,
-            ),
-            const SizedBox(height: 15),
-            InputField(
-              label: "Desilting Level (m)",
-              controller: desiltingLevelController,
-            ),
-            const SizedBox(height: 15),
-            InputField(
-              label: "Average Load (MW)",
-              controller: loadController,
-            ),
-            const SizedBox(height: 15),
-            InputField(
-              label: "Reservoir Level for Other Discharges (m)",
-              controller: reservoirLevelController,
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  children: [
+                    InputField(
+                      label: "Previous Reservoir Level (m)",
+                      controller: previousLevelController,
+                    ),
+                    const SizedBox(height: 15),
+                    InputField(
+                      label: "Current Reservoir Level (m)",
+                      controller: currentLevelController,
+                    ),
+                    const SizedBox(height: 15),
+                    InputField(
+                      label: "Desilting Level (m)",
+                      controller: desiltingLevelController,
+                    ),
+                    const SizedBox(height: 15),
+                    InputField(
+                      label: "Average Load (MW)",
+                      controller: loadController,
+                    ),
+                    const SizedBox(height: 15),
+                    InputField(
+                      label: "Reservoir Level for Other Discharges (m)",
+                      controller: reservoirLevelController,
+                    ),
+                  ],
+                ),
+              ),
             ),
             const SizedBox(height: 30),
             sectionTitle("Radial Gates"),
@@ -608,7 +732,7 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
               label: "RG-1 Status",
               openingController: rg1Controller,
               gatedMinsController: rg1GatedMinsController,
-              freeflowOpeningController: rg1FreeflowOpeningController, 
+              freeflowOpeningController: rg1FreeflowOpeningController,
               freeflowMinsController: rg1FreeflowMinsController,
               totalDischarge: rg1Discharge,
               onChanged: calculateDischarge,
@@ -618,7 +742,7 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
               label: "RG-2 Status",
               openingController: rg2Controller,
               gatedMinsController: rg2GatedMinsController,
-              freeflowOpeningController: rg2FreeflowOpeningController, 
+              freeflowOpeningController: rg2FreeflowOpeningController,
               freeflowMinsController: rg2FreeflowMinsController,
               totalDischarge: rg2Discharge,
               onChanged: calculateDischarge,
@@ -628,187 +752,198 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
               label: "RG-3 Status",
               openingController: rg3Controller,
               gatedMinsController: rg3GatedMinsController,
-              freeflowOpeningController: rg3FreeflowOpeningController, 
+              freeflowOpeningController: rg3FreeflowOpeningController,
               freeflowMinsController: rg3FreeflowMinsController,
               totalDischarge: rg3Discharge,
               onChanged: calculateDischarge,
             ),
             const SizedBox(height: 30),
             sectionTitle("Other Discharges"),
-            Row(
-              children: [
-                Expanded(
-                  child: DischargeInputCard(
-                    label: "Fishpass pipe Discharge (Cumecs)",
-                    controller: fishpassPipeController,
-                    discharge: fishpassPipe,
-                    readOnly: fishpassPipeAuto,
-                    onChanged: (value) {
-                      if (!fishpassPipeAuto) {
-                        calculateDischarge();
-                      }
-                    },
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Column(
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
                   children: [
-                    const Text("Auto"),
-                    Switch(
-                      value: fishpassPipeAuto,
+                    Row(
+                      children: [
+                        Expanded(
+                          child: DischargeInputCard(
+                            label: "Fishpass pipe Discharge (Cumecs)",
+                            controller: fishpassPipeController,
+                            discharge: fishpassPipe,
+                            readOnly: fishpassPipeAuto,
+                            onChanged: (value) {
+                              if (!fishpassPipeAuto) {
+                                calculateDischarge();
+                              }
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Column(
+                          children: [
+                            const Text("Auto"),
+                            Switch(
+                              value: fishpassPipeAuto,
+                              onChanged: (value) {
+                                setState(() {
+                                  fishpassPipeAuto = value;
+                                });
+                                calculateDischarge();
+                              },
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 15),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: DischargeInputCard(
+                            label: "Fishpass Channel Discharge (Cumecs)",
+                            controller: fishpassChannelController,
+                            discharge: fishpassChannel,
+                            readOnly: fishpassChannelAuto,
+                            onChanged: (value) {
+                              if (!fishpassChannelAuto) {
+                                calculateDischarge();
+                              }
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Column(
+                          children: [
+                            const Text("Auto"),
+                            Switch(
+                              value: fishpassChannelAuto,
+                              onChanged: (value) {
+                                setState(() {
+                                  fishpassChannelAuto = value;
+                                });
+                                calculateDischarge();
+                              },
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 15),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: InputField(
+                            label: "E-Flow",
+                            controller: eflowController,
+                            readOnly: eflowAuto,
+                            onChanged: (value) {
+                              calculateDischarge();
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Column(
+                          children: [
+                            const Text("Auto"),
+                            Switch(
+                              value: eflowAuto,
+                              onChanged: (value) {
+                                setState(() {
+                                  eflowAuto = value;
+                                });
+                                calculateDischarge();
+                              },
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 15),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: InputField(
+                            label: sft1Auto
+                                ? "SFT-1 Gate Opening (mm)"
+                                : "SFT-1 Discharge (m³/s)",
+                            controller: sft1Controller,
+                            readOnly: false,
+                            onChanged: (value) {
+                              calculateDischarge();
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Column(
+                          children: [
+                            const Text("Auto"),
+                            Switch(
+                              value: sft1Auto,
+                              onChanged: (value) {
+                                setState(() {
+                                  sft1Auto = value;
+                                });
+                                calculateDischarge();
+                              },
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 15),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: InputField(
+                            label: sft2Auto
+                                ? "SFT-2 Gate Opening (mm)"
+                                : "SFT-2 Discharge (m³/s)",
+                            controller: sft2Controller,
+                            readOnly: false,
+                            onChanged: (value) {
+                              calculateDischarge();
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Column(
+                          children: [
+                            const Text("Auto"),
+                            Switch(
+                              value: sft2Auto,
+                              onChanged: (value) {
+                                setState(() {
+                                  sft2Auto = value;
+                                });
+                                calculateDischarge();
+                              },
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 15),
+                    DischargeInputCard(
+                      label: "FDRG Gate Opening (mm)",
+                      controller: fdrgController,
+                      discharge: fdrg,
                       onChanged: (value) {
-                        setState(() {
-                          fishpassPipeAuto = value;
-                        });
                         calculateDischarge();
                       },
                     ),
                   ],
                 ),
-              ],
+              ),
             ),
-            const SizedBox(height: 15),
-            Row(
-              children: [
-                Expanded(
-                  child: DischargeInputCard(
-                    label: "Fishpass Channel Discharge (Cumecs)",
-                    controller: fishpassChannelController,
-                    discharge: fishpassChannel,
-                    readOnly: fishpassChannelAuto,
-                    onChanged: (value) {
-                      if (!fishpassChannelAuto) {
-                        calculateDischarge();
-                      }
-                    },
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Column(
-                  children: [
-                    const Text("Auto"),
-                    Switch(
-                      value: fishpassChannelAuto,
-                      onChanged: (value) {
-                        setState(() {
-                          fishpassChannelAuto = value;
-                        });
-                        calculateDischarge();
-                      },
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            const SizedBox(height: 15),
-            Row(
-              children: [
-                Expanded(
-                  child: InputField(
-                    label: "E-Flow",
-                    controller: eflowController,
-                    readOnly: eflowAuto,
-                    onChanged: (value) {
-                      calculateDischarge();
-                    },
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Column(
-                  children: [
-                    const Text("Auto"),
-                    Switch(
-                      value: eflowAuto,
-                      onChanged: (value) {
-                        setState(() {
-                          eflowAuto = value;
-                        });
-                        calculateDischarge();
-                      },
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            const SizedBox(height: 15),
-            Row(
-              children: [
-                Expanded(
-                  child: InputField(
-                    label: sft1Auto
-                        ? "SFT-1 Gate Opening (mm)"
-                        : "SFT-1 Discharge (m³/s)",
-                    controller: sft1Controller,
-                    readOnly: false,
-                    onChanged: (value) {
-                      calculateDischarge();
-                    },
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Column(
-                  children: [
-                    const Text("Auto"),
-                    Switch(
-                      value: sft1Auto,
-                      onChanged: (value) {
-                        setState(() {
-                          sft1Auto = value;
-                        });
-                        calculateDischarge();
-                      },
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            Row(
-              children: [
-                Expanded(
-                  child: InputField(
-                    label: sft2Auto
-                        ? "SFT-2 Gate Opening (mm)"
-                        : "SFT-2 Discharge (m³/s)",
-                    controller: sft2Controller,
-                    readOnly: false,
-                    onChanged: (value) {
-                      calculateDischarge();
-                    },
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Column(
-                  children: [
-                    const Text("Auto"),
-                    Switch(
-                      value: sft2Auto,
-                      onChanged: (value) {
-                        setState(() {
-                          sft2Auto = value;
-                        });
-                        calculateDischarge();
-                      },
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            const SizedBox(height: 15),
-            DischargeInputCard(
-              label: "FDRG Gate Opening (mm)",
-              controller: fdrgController,
-              discharge: fdrg,
-              onChanged: (value) {
-                calculateDischarge();
-              },
-            ), 
             const SizedBox(height: 30),
             Row(
               children: [
                 Expanded(
                   child: OutlinedButton.icon(
                     icon: const Icon(Icons.calendar_today),
-                    label: Text("${concentrationDate.day.toString().padLeft(2, '0')}-${concentrationDate.month.toString().padLeft(2, '0')}-${concentrationDate.year}"),
+                    label: Text(
+                        "${concentrationDate.day.toString().padLeft(2, '0')}-${concentrationDate.month.toString().padLeft(2, '0')}-${concentrationDate.year}"),
                     onPressed: () async {
                       DateTime? pickedDate = await showDatePicker(
                         context: context,
@@ -828,7 +963,8 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
                 Expanded(
                   child: OutlinedButton.icon(
                     icon: const Icon(Icons.access_time),
-                    label: Text("${concentrationTime.hour.toString().padLeft(2, '0')}:${concentrationTime.minute.toString().padLeft(2, '0')} Hrs"),
+                    label: Text(
+                        "${concentrationTime.hour.toString().padLeft(2, '0')}:${concentrationTime.minute.toString().padLeft(2, '0')} Hrs"),
                     onPressed: () async {
                       TimeOfDay? pickedTime = await showTimePicker(
                         context: context,
@@ -854,6 +990,10 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
               width: double.infinity,
               height: 55,
               child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF1E3A8A),
+                  foregroundColor: Colors.white,
+                ),
                 onPressed: calculateDischarge,
                 child: const Text(
                   "CALCULATE",
@@ -866,6 +1006,10 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
               width: double.infinity,
               height: 55,
               child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.teal.shade700,
+                  foregroundColor: Colors.white,
+                ),
                 icon: const Icon(Icons.save),
                 label: const Text(
                   "SAVE READING",
@@ -883,7 +1027,8 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
                   children: [
                     const Text(
                       "Calculation Result",
-                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                      style:
+                          TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
                     ),
                     const Divider(),
                     resultRow("POWER HOUSE DISCHARGE", powerHouseDischarge),
@@ -891,12 +1036,14 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
                     resultRow("RG-2", rg2Discharge),
                     resultRow("RG-3", rg3Discharge),
                     const Divider(),
-                    resultRow("Total RG Discharge", rg1Discharge + rg2Discharge + rg3Discharge),
+                    resultRow("Total RG Discharge",
+                        rg1Discharge + rg2Discharge + rg3Discharge),
                     const Divider(),
                     resultRow("FISHPASS PIPE DISCHARGE", fishpassPipe),
                     resultRow("FISHPASS CHANNEL DISCHARGE", fishpassChannel),
                     const Divider(),
-                    resultRow("TOTAL FISHPASS DISCHARGE", fishpassChannel + fishpassPipe),
+                    resultRow("TOTAL FISHPASS DISCHARGE",
+                        fishpassChannel + fishpassPipe),
                     const Divider(),
                     resultRow("E-FLOW DISCHARGE", eflow),
                     const Divider(),
@@ -907,10 +1054,14 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
                     const Divider(),
                     resultRow("FDRG Discharge", fdrg),
                     const Divider(),
-                    resultRow("Desilting Level Difference", desiltingLevelDifference),
+                    resultRow(
+                        "Desilting Level Difference", desiltingLevelDifference),
                     const Divider(),
-                    resultRow("BARRAGE OUTFLOW DISCHARGE", barrageWaterRelease),
-                    resultRow("TOTAL OUTFLOW DISCHARGE", barrageWaterRelease + powerHouseDischarge),
+                    resultRow(
+                        "BARRAGE OUTFLOW DISCHARGE", barrageWaterRelease),
+                    resultRow(
+                        "TOTAL OUTFLOW DISCHARGE",
+                        barrageWaterRelease + powerHouseDischarge),
                     const Divider(),
                     resultRow("Reservoir calculation", storageCorrection),
                     const Divider(),
@@ -930,19 +1081,21 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
             Center(
               child: ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green, 
+                  backgroundColor: Colors.green,
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                 ),
                 icon: const Icon(Icons.share),
-                label: const Text("Generate WhatsApp Report", style: TextStyle(fontSize: 16)),
+                label: const Text("Generate WhatsApp Report",
+                    style: TextStyle(fontSize: 16)),
                 onPressed: () => _showWhatsAppReportDialog(context),
               ),
             ),
-            const SizedBox(height: 40), 
-          ], 
-        ), 
-      ), 
-    ); 
+            const SizedBox(height: 40),
+          ],
+        ),
+      ),
+    );
   }
 }

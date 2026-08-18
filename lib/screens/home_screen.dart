@@ -1,11 +1,31 @@
 import 'package:flutter/material.dart';
 import 'hourly_calculator_screen.dart';
 import 'history_screen.dart';
+import 'login_screen.dart';
+void main() {
+  runApp(const HydroCalcApp());
+}
 
+class HydroCalcApp extends StatelessWidget {
+  const HydroCalcApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Barrage Management System',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        primarySwatch: Colors.blue,
+      ),
+      home: const LoginScreen(), // Set Login as the initial startup screen
+    );
+  }
+}
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
 
   @override
+
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
