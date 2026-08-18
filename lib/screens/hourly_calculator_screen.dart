@@ -14,6 +14,7 @@ import '../services/freeflow_service.dart';
 import '../widgets/radial_gate_card.dart';
 import 'package:hydrocalc/services/whatsapp_report_service.dart';
 import 'package:http/http.dart' as http;
+import 'package:connectivity_plus/connectivity_plus.dart';
 
 class HourlyCalculatorScreen extends StatefulWidget {
   const HourlyCalculatorScreen({super.key});
@@ -23,9 +24,15 @@ class HourlyCalculatorScreen extends StatefulWidget {
       _HourlyCalculatorScreenState();
 }
 
-class _HourlyCalculatorScreenState
-    extends State<HourlyCalculatorScreen> {
+class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
       
+  @override
+  void initState() {
+    super.initState();
+    // Automatically attempt to flush the offline queue when the screen loads
+    syncPendingQueue();
+  }
+
   DateTime selectedDate = DateTime.now(); 
   TimeOfDay selectedTime = TimeOfDay.now(); 
   DateTime concentrationDate = DateTime.now();
@@ -43,14 +50,11 @@ class _HourlyCalculatorScreenState
   String selectedWeather = 'cloudy'; 
 
   void _showWhatsAppReportDialog(BuildContext context) {
+    String hourlyTimeString = "${selectedTime.hour.toString().padLeft(2, '0')}:00";
+    String concDateStr = "${concentrationDate.day.toString().padLeft(2, '0')}-${concentrationDate.month.toString().padLeft(2, '0')}-${concentrationDate.year}";
+    String concTimeStr = "${concentrationTime.hour.toString().padLeft(2, '0')}:${concentrationTime.minute.toString().padLeft(2, '0')}";
+    String finalConcDateTime = "$concDateStr (${concTimeStr}Hrs)";
     
-// 1. Hourly report time (hours only for the main body)
-String hourlyTimeString = "${selectedTime.hour.toString().padLeft(2, '0')}:00";
-
-// 2. Exact concentration date and time from your separate pickers
-String concDateStr = "${concentrationDate.day.toString().padLeft(2, '0')}-${concentrationDate.month.toString().padLeft(2, '0')}-${concentrationDate.year}";
-String concTimeStr = "${concentrationTime.hour.toString().padLeft(2, '0')}:${concentrationTime.minute.toString().padLeft(2, '0')}";
-String finalConcDateTime = "$concDateStr (${concTimeStr}Hrs)";
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -64,8 +68,6 @@ String finalConcDateTime = "$concDateStr (${concTimeStr}Hrs)";
               subtitle: const Text("Includes all gates, fish pass, e-flow, etc."),
               onTap: () {
                 Navigator.pop(context);
-                
-                // FIXED: Passing actual calculated variables instead of 0.0
                 String report = WhatsappReportService.formatReport1(
                   date: selectedDate,
                   time: hourlyTimeString,
@@ -83,8 +85,8 @@ String finalConcDateTime = "$concDateStr (${concTimeStr}Hrs)";
                   sftDischarge: sft+sft,
                   fishPassDischarge: fishpassChannel + fishpassPipe,
                   eflowPipeDischarge: eflow,
-                  finalConcDateTime: finalConcDateTime, // Pass the formatted concentration date and time
-                  concentrationController: concentrationController, // Pass the controller
+                  finalConcDateTime: finalConcDateTime,
+                  concentrationController: concentrationController,
                   weather: selectedWeather,
                 );
                 _copyToClipboard(context, report, "Format 1");
@@ -97,8 +99,6 @@ String finalConcDateTime = "$concDateStr (${concTimeStr}Hrs)";
               subtitle: const Text("River discharge, outflow, machine discharge"),
               onTap: () {
                 Navigator.pop(context);
-                
-                // FIXED: Passing actual calculated variables
                 String report2 = WhatsappReportService.formatReport2(
                   date: selectedDate,
                   time: hourlyTimeString,
@@ -118,8 +118,6 @@ String finalConcDateTime = "$concDateStr (${concTimeStr}Hrs)";
               subtitle: const Text("Naitwar Mori HPS site info & design limits"),
               onTap: () {
                 Navigator.pop(context);
-                
-                // FIXED: Passing actual calculated variables
                 String report3 = WhatsappReportService.formatReport3(
                   date: selectedDate,
                   time: hourlyTimeString,
@@ -174,7 +172,7 @@ String finalConcDateTime = "$concDateStr (${concTimeStr}Hrs)";
   final rg1FreeflowOpeningController = TextEditingController();
   final rg2FreeflowOpeningController = TextEditingController();
   final rg3FreeflowOpeningController = TextEditingController();
-  final concentrationController = TextEditingController(); // Default value if needed
+  final concentrationController = TextEditingController();
 
   // Results
   double desiltingLevelDifference = 0.0;
@@ -188,7 +186,6 @@ String finalConcDateTime = "$concDateStr (${concTimeStr}Hrs)";
   double fishpassChannel = 0.0;
   double eflow = 0.0;
   double sft = 0.0;
-
   double fdrg = 0.0;
 
   double calculateRadialGateDischarge(
@@ -200,7 +197,6 @@ String finalConcDateTime = "$concDateStr (${concTimeStr}Hrs)";
   ) {
     double openingMm = double.tryParse(openingCtrl.text) ?? 0.0;
     int gatedMins = int.tryParse(gatedMinsCtrl.text) ?? 0;
-    
     double freeflowOpeningMm = double.tryParse(freeflowOpeningCtrl.text) ?? 0.0; 
     int freeflowMins = int.tryParse(freeflowMinsCtrl.text) ?? 0;
 
@@ -266,7 +262,6 @@ String finalConcDateTime = "$concDateStr (${concTimeStr}Hrs)";
     final desiltingLevel = double.tryParse(desiltingLevelController.text) ?? 0.0;
 
     desiltingLevelDifference = (currentLevel - desiltingLevel);
-
 
     double gateReservoirLevel = double.tryParse(reservoirLevelController.text) ?? 0;
     
@@ -358,7 +353,7 @@ String finalConcDateTime = "$concDateStr (${concTimeStr}Hrs)";
         fishpassPipe +
         fishpassChannel +
         eflow +
-        sft+
+        sft +
         sft +
         fdrg;
         
@@ -375,84 +370,123 @@ String finalConcDateTime = "$concDateStr (${concTimeStr}Hrs)";
     setState(() {});
   }
 
-Future<void> saveReading() async {
-  final prefs = await SharedPreferences.getInstance();
-  List<String> readings = prefs.getStringList('hourly_readings') ?? [];
+  Future<void> saveReading() async {
+    final prefs = await SharedPreferences.getInstance();
+    List<String> readings = prefs.getStringList('hourly_readings') ?? [];
+    List<String> pendingQueue = prefs.getStringList('pending_sync_queue') ?? [];
 
-  String hourlyTimeString = "${selectedTime.hour.toString().padLeft(2, '0')}:00";
+    String hourlyTimeString = "${selectedTime.hour.toString().padLeft(2, '0')}:00";
 
-  // FIXED: Using selectedDate instead of DateTime.now() for the date string
-  final reading = {
-    "date": "${selectedDate.day.toString().padLeft(2, '0')}-${selectedDate.month.toString().padLeft(2, '0')}-${selectedDate.year}",
-    "time": hourlyTimeString,
-    "currentLevel": currentLevelController.text,
-    "avgLoad": loadController.text,
-    "powerHouseDischarge": powerHouseDischarge.toStringAsFixed(2),
-    "rg1": rg1Discharge.toStringAsFixed(2),
-    "rg2": rg2Discharge.toStringAsFixed(2),
-    "rg3": rg3Discharge.toStringAsFixed(2),
-    "sft1": sft.toStringAsFixed(2),
-    "sft2": sft.toStringAsFixed(2),
-    "eflow": eflow.toStringAsFixed(2),
-    "fdrg": fdrg.toStringAsFixed(2),
-    "barrageOutflow": barrageWaterRelease.toStringAsFixed(2),
-    "totalOutflow": totalOutflowDischarge.toStringAsFixed(2),
-    "inflow": inflowDischarge.toStringAsFixed(2),
-  };
-  
-  // Rest of your save/sync code...
+    final reading = {
+      "date": "${selectedDate.day.toString().padLeft(2, '0')}-${selectedDate.month.toString().padLeft(2, '0')}-${selectedDate.year}",
+      "time": hourlyTimeString,
+      "currentLevel": currentLevelController.text,
+      "avgLoad": loadController.text,
+      "powerHouseDischarge": powerHouseDischarge.toStringAsFixed(2),
+      "rg1": rg1Discharge.toStringAsFixed(2),
+      "rg2": rg2Discharge.toStringAsFixed(2),
+      "rg3": rg3Discharge.toStringAsFixed(2),
+      "sft1": sft.toStringAsFixed(2),
+      "sft2": sft.toStringAsFixed(2),
+      "eflow": eflow.toStringAsFixed(2),
+      "fdrg": fdrg.toStringAsFixed(2),
+      "barrageOutflow": barrageWaterRelease.toStringAsFixed(2),
+      "totalOutflow": totalOutflowDischarge.toStringAsFixed(2),
+      "inflow": inflowDischarge.toStringAsFixed(2),
+    };
 
-  // 1. Save locally to SharedPreferences
-  readings.add(jsonEncode(reading));
-  await prefs.setStringList('hourly_readings', readings);
+    // Save locally first so it's never lost
+    readings.add(jsonEncode(reading));
+    await prefs.setStringList('hourly_readings', readings);
 
-  // 2. Export/Sync directly to Google Sheet via GET parameters
-  try {
-    // PASTE YOUR LATEST DEPLOYMENT URL BELOW
-    final uri = Uri.parse("https://script.google.com/macros/s/AKfycbxyd30kmNaKX-BzRx187Rf7Si4hGgA9qdIxUgvUOw9xOW0letGpOCVTxpH2en9ALAXo4A/exec").replace(
-      queryParameters: reading.map((key, value) => MapEntry(key, value.toString())),
-    );
+    // Check internet connectivity
+    var connectivityResult = await (Connectivity().checkConnectivity());
+    bool isConnected = !connectivityResult.contains(ConnectivityResult.none);
 
-    final response = await http.get(uri);
-    
-    if (response.statusCode == 200) {
-      debugPrint("Successfully synced to Google Sheet!");
+    if (isConnected) {
+      bool success = await _sendToGoogleSheet(reading);
+      if (!success) {
+        pendingQueue.add(jsonEncode(reading));
+        await prefs.setStringList('pending_sync_queue', pendingQueue);
+      }
     } else {
-      debugPrint("Sync failed with status code: ${response.statusCode}");
+      pendingQueue.add(jsonEncode(reading));
+      await prefs.setStringList('pending_sync_queue', pendingQueue);
+      debugPrint("No internet. Saved to offline sync queue.");
     }
-  } catch (e) {
-    debugPrint("Google Sheet sync failed: $e");
+
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(isConnected ? "Reading Saved & Synced!" : "Offline: Saved Locally & Queued for Sync!"),
+        backgroundColor: isConnected ? Colors.green : Colors.orange,
+      ),
+    );
   }
 
-  if (!mounted) return;
+  Future<void> syncPendingQueue() async {
+    final prefs = await SharedPreferences.getInstance();
+    List<String> pendingQueue = prefs.getStringList('pending_sync_queue') ?? [];
 
-  ScaffoldMessenger.of(context).showSnackBar(
-    const SnackBar(content: Text("Reading Saved Successfully & Synced!")),
-  );
-}
+    if (pendingQueue.isEmpty) return;
 
-Widget sectionTitle(String text) {
-  return Padding(
-    padding: const EdgeInsets.only(bottom: 12),
-    child: Text(
-      text,
-      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-    ),
-  );
-}
+    var connectivityResult = await (Connectivity().checkConnectivity());
+    if (connectivityResult.contains(ConnectivityResult.none)) return;
 
-Widget resultRow(String title, double value) {
-  return Padding(
-    padding: const EdgeInsets.symmetric(vertical: 4),
-    child: Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(title),
-        Text("${value.toStringAsFixed(2)} m³/s"),
-      ],
-    ),
-  );
-}
+    List<String> stillPending = [];
+
+    for (String itemStr in pendingQueue) {
+      Map<String, dynamic> reading = jsonDecode(itemStr);
+      bool success = await _sendToGoogleSheet(reading);
+      if (!success) {
+        stillPending.add(itemStr);
+      }
+    }
+
+    await prefs.setStringList('pending_sync_queue', stillPending);
+    
+    if (stillPending.length < pendingQueue.length) {
+      debugPrint("Successfully synced offline queue items to Google Sheets!");
+    }
+  }
+
+  Future<bool> _sendToGoogleSheet(Map<String, dynamic> reading) async {
+    try {
+      final uri = Uri.parse("https://script.google.com/macros/s/AKfycbxyd30kmNaKX-BzRx187Rf7Si4hGgA9qdIxUgvUOw9xOW0letGpOCVTxpH2en9ALAXo4A/exec").replace(
+        queryParameters: reading.map((key, value) => MapEntry(key, value.toString())),
+      );
+
+      final response = await http.get(uri);
+      return response.statusCode == 200;
+    } catch (e) {
+      debugPrint("Google Sheet sync error: $e");
+      return false;
+    }
+  }
+
+  Widget sectionTitle(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Text(
+        text,
+        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+      ),
+    );
+  }
+
+  Widget resultRow(String title, double value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(title),
+          Text("${value.toStringAsFixed(2)} m³/s"),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -515,30 +549,29 @@ Widget resultRow(String title, double value) {
                 ),
               ],
             ),
-            // Add this inside your Column children list where you want the weather picker to appear:
-Padding(
-  padding: const EdgeInsets.symmetric(vertical: 10),
-  child: DropdownButtonFormField<String>(
-    initialValue: selectedWeather,
-    decoration: const InputDecoration(
-      labelText: "Weather Condition",
-      border: OutlineInputBorder(),
-    ),
-    items: const [
-      DropdownMenuItem(value: 'Clear', child: Text("clear ☀️")),
-      DropdownMenuItem(value: 'cloudy', child: Text("Cloudy ☁️")),
-      DropdownMenuItem(value: 'rainy', child: Text("Rainy 🌧️")),
-      DropdownMenuItem(value: 'heavy rainy', child: Text("heavy rainy ⛈️")),
-    ],
-    onChanged: (String? newWeather) {
-      if (newWeather != null) {
-        setState(() {
-          selectedWeather = newWeather;
-        });
-      }
-    },
-  ),
-),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              child: DropdownButtonFormField<String>(
+                initialValue: selectedWeather,
+                decoration: const InputDecoration(
+                  labelText: "Weather Condition",
+                  border: OutlineInputBorder(),
+                ),
+                items: const [
+                  DropdownMenuItem(value: 'Clear', child: Text("clear ☀️")),
+                  DropdownMenuItem(value: 'cloudy', child: Text("Cloudy ☁️")),
+                  DropdownMenuItem(value: 'rainy', child: Text("Rainy 🌧️")),
+                  DropdownMenuItem(value: 'heavy rainy', child: Text("heavy rainy ⛈️")),
+                ],
+                onChanged: (String? newWeather) {
+                  if (newWeather != null) {
+                    setState(() {
+                      selectedWeather = newWeather;
+                    });
+                  }
+                },
+              ),
+            ),
             sectionTitle("Reservoir Levels"),
             InputField(
               label: "Previous Reservoir Level (m)",
@@ -554,7 +587,7 @@ Padding(
               label: "Desilting Level (m)",
               controller: desiltingLevelController,
             ),
-             const SizedBox(height: 15),
+            const SizedBox(height: 15),
             InputField(
               label: "Average Load (MW)",
               controller: loadController,
@@ -769,55 +802,52 @@ Padding(
                 calculateDischarge();
               },
             ), 
-              const SizedBox(height: 30),
+            const SizedBox(height: 30),
             Row(
-  children: [
-    // Date Picker Button
-    Expanded(
-      child: OutlinedButton.icon(
-        icon: const Icon(Icons.calendar_today),
-        label: Text("${concentrationDate.day.toString().padLeft(2, '0')}-${concentrationDate.month.toString().padLeft(2, '0')}-${concentrationDate.year}"),
-        onPressed: () async {
-          DateTime? pickedDate = await showDatePicker(
-            context: context,
-            initialDate: concentrationDate,
-            firstDate: DateTime(2025),
-            lastDate: DateTime(2030),
-          );
-          if (pickedDate != null) {
-            setState(() {
-              concentrationDate = pickedDate;
-            });
-          }
-        },
-      ),
-    ),
-    const SizedBox(width: 30),
-    
-    // Time Picker Button
-    Expanded(
-      child: OutlinedButton.icon(
-        icon: const Icon(Icons.access_time),
-        label: Text("${concentrationTime.hour.toString().padLeft(2, '0')}:${concentrationTime.minute.toString().padLeft(2, '0')} Hrs"),
-        onPressed: () async {
-          TimeOfDay? pickedTime = await showTimePicker(
-            context: context,
-            initialTime: concentrationTime,
-          );
-          if (pickedTime != null) {
-            setState(() {
-              concentrationTime = pickedTime;
-            });
-          }
-        },
-      ),
-    ),
-  ],
-),
-const SizedBox(height: 15),
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    icon: const Icon(Icons.calendar_today),
+                    label: Text("${concentrationDate.day.toString().padLeft(2, '0')}-${concentrationDate.month.toString().padLeft(2, '0')}-${concentrationDate.year}"),
+                    onPressed: () async {
+                      DateTime? pickedDate = await showDatePicker(
+                        context: context,
+                        initialDate: concentrationDate,
+                        firstDate: DateTime(2025),
+                        lastDate: DateTime(2030),
+                      );
+                      if (pickedDate != null) {
+                        setState(() {
+                          concentrationDate = pickedDate;
+                        });
+                      }
+                    },
+                  ),
+                ),
+                const SizedBox(width: 30),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    icon: const Icon(Icons.access_time),
+                    label: Text("${concentrationTime.hour.toString().padLeft(2, '0')}:${concentrationTime.minute.toString().padLeft(2, '0')} Hrs"),
+                    onPressed: () async {
+                      TimeOfDay? pickedTime = await showTimePicker(
+                        context: context,
+                        initialTime: concentrationTime,
+                      );
+                      if (pickedTime != null) {
+                        setState(() {
+                          concentrationTime = pickedTime;
+                        });
+                      }
+                    },
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 15),
             InputField(
-            label: "Concentration (ppm)",
-            controller: concentrationController,
+              label: "Concentration (ppm)",
+              controller: concentrationController,
             ),
             const SizedBox(height: 30),
             SizedBox(
@@ -845,8 +875,6 @@ const SizedBox(height: 15),
               ),
             ),
             const SizedBox(height: 30),
-            
-            const SizedBox(height: 15),
             Card(
               elevation: 5,
               child: Padding(
@@ -863,39 +891,26 @@ const SizedBox(height: 15),
                     resultRow("RG-2", rg2Discharge),
                     resultRow("RG-3", rg3Discharge),
                     const Divider(),
-                    resultRow(
-                      "Total RG Discharge",
-                      rg1Discharge + rg2Discharge + rg3Discharge,
-                    ),
+                    resultRow("Total RG Discharge", rg1Discharge + rg2Discharge + rg3Discharge),
                     const Divider(),
                     resultRow("FISHPASS PIPE DISCHARGE", fishpassPipe),
                     resultRow("FISHPASS CHANNEL DISCHARGE", fishpassChannel),
                     const Divider(),
-                    resultRow(
-                      "TOTAL FISHPASS DISCHARGE",
-                      fishpassChannel + fishpassPipe,
-                    ),
-                    
+                    resultRow("TOTAL FISHPASS DISCHARGE", fishpassChannel + fishpassPipe),
                     const Divider(),
                     resultRow("E-FLOW DISCHARGE", eflow),
                     const Divider(),
                     resultRow("SFT-1 DISCHARGE", sft),
                     resultRow("SFT-2 DISCHARGE", sft),
-                     const Divider(),
-                     resultRow(
-                      "TOTAL SFT DISCHARGE",
-                      sft + sft,
-                    ),
-                     const Divider(),
+                    const Divider(),
+                    resultRow("TOTAL SFT DISCHARGE", sft + sft),
+                    const Divider(),
                     resultRow("FDRG Discharge", fdrg),
                     const Divider(),
                     resultRow("Desilting Level Difference", desiltingLevelDifference),
-                     const Divider(),
+                    const Divider(),
                     resultRow("BARRAGE OUTFLOW DISCHARGE", barrageWaterRelease),
-                    resultRow(
-                      "TOTAL OUTFLOW DISCHARGE",
-                      barrageWaterRelease + powerHouseDischarge,
-                    ),
+                    resultRow("TOTAL OUTFLOW DISCHARGE", barrageWaterRelease + powerHouseDischarge),
                     const Divider(),
                     resultRow("Reservoir calculation", storageCorrection),
                     const Divider(),
