@@ -1,26 +1,8 @@
 import 'package:flutter/material.dart';
 import 'hourly_calculator_screen.dart';
 import 'history_screen.dart';
-import 'login_screen.dart';
-void main() {
-  runApp(const HydroCalcApp());
-}
+import 'daily_summary_screen.dart';
 
-class HydroCalcApp extends StatelessWidget {
-  const HydroCalcApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Barrage Management System',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-      ),
-      home: const LoginScreen(), // Set Login as the initial startup screen
-    );
-  }
-}
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
 
@@ -93,14 +75,33 @@ class HomePage extends StatelessWidget {
 
             const SizedBox(height: 15),
 
-            SizedBox(
-              width: double.infinity,
-              height: 55,
-              child: ElevatedButton(
-                onPressed: () {},
-                child: const Text("Daily Summary"),
-              ),
-            ),
+      
+
+// 2. Find your "Daily Summary" button inside the build method and update its onPressed:
+SizedBox(
+  width: double.infinity,
+  height: 55,
+  child: ElevatedButton.icon(
+    style: ElevatedButton.styleFrom(
+      backgroundColor: const Color(0xFF1E3A8A),
+      foregroundColor: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+    ),
+    icon: const Icon(Icons.analytics_outlined),
+    label: const Text(
+      "DAILY SUMMARY",
+      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+    ),
+    onPressed: () {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const DailySummaryScreen(),
+        ),
+      );
+    },
+  ),
+),
 
             const Spacer(),
 

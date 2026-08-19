@@ -38,8 +38,9 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (_shiftCredentials.containsKey(username) && _shiftCredentials[username] == password) {
         isAuthenticated = true;
-        if (username == "supervisor") userRole = "Supervisor";
-        else if (username == "groupa") userRole = "Group A";
+        if (username == "supervisor") {
+          userRole = "Supervisor";
+        } else if (username == "groupa") userRole = "Group A";
         else if (username == "groupb") userRole = "Group B";
         else if (username == "groupc") userRole = "Group C";
         else if (username == "groupd") userRole = "Group D";
@@ -79,7 +80,7 @@ class _LoginScreenState extends State<LoginScreen> {
               width: 420,
               padding: const EdgeInsets.all(32.0),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.95),
+                color: Colors.white.withValues(alpha: 0.95),
                 borderRadius: BorderRadius.circular(16.0),
                 boxShadow: const [
                   BoxShadow(
