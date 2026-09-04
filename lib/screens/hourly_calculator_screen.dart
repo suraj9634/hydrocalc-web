@@ -1,5 +1,5 @@
 import 'dart:async';
-
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
@@ -16,7 +16,6 @@ import '../services/freeflow_service.dart';
 import '../widgets/radial_gate_card.dart';
 import 'package:hydrocalc/services/whatsapp_report_service.dart';
 import 'package:http/http.dart' as http;
-import 'package:connectivity_plus/connectivity_plus.dart';
 
 class HourlyCalculatorScreen extends StatefulWidget {
   const HourlyCalculatorScreen({super.key});
@@ -30,8 +29,8 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
   @override
   void initState() {
     super.initState();
-    syncPendingQueue();
-    _startHourlyAlarmChecker(); // Starts checking the system time every 30 seconds
+    autoFetchPreviousLevel();
+    _startHourlyAlarmChecker();
   }
 
   Timer? _hourlyCheckTimer;
@@ -51,6 +50,59 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
   }
 
   String selectedWeather = 'cloudy';
+
+  // 2-Decimal Precision Helper
+  double round2Dec(dynamic value) {
+    if (value == null) return 0.00;
+    if (value is num) return double.parse(value.toStringAsFixed(2));
+    double? parsed = double.tryParse(value.toString());
+    return parsed != null ? double.parse(parsed.toStringAsFixed(2)) : 0.00;
+  }
+
+  Future<void> autoFetchPreviousLevel() async {
+    DateTime prevDateTime = DateTime(
+      selectedDate.year,
+      selectedDate.month,
+      selectedDate.day,
+      selectedTime.hour,
+    ).subtract(const Duration(hours: 1));
+
+    String prevDateStr =
+        "${prevDateTime.day.toString().padLeft(2, '0')}-${prevDateTime.month.toString().padLeft(2, '0')}-${prevDateTime.year}";
+    String prevTimeStr =
+        "${prevDateTime.hour.toString().padLeft(2, '0')}:00";
+    String prevDocId = "${prevDateStr}_$prevTimeStr";
+
+    try {
+      DocumentSnapshot doc = await FirebaseFirestore.instance
+          .collection('barrage_readings')
+          .doc(prevDocId)
+          .get();
+
+      if (doc.exists && doc.data() != null) {
+        final data = doc.data() as Map<String, dynamic>;
+        if (data.containsKey('currentLevel')) {
+          setState(() {
+            previousLevelController.text =
+                round2Dec(data['currentLevel']).toStringAsFixed(2);
+          });
+          calculateDischarge();
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                    "Auto-loaded previous level ($prevTimeStr): ${previousLevelController.text} m"),
+                duration: const Duration(seconds: 2),
+                backgroundColor: Colors.blueGrey,
+              ),
+            );
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint("Could not fetch previous reading: $e");
+    }
+  }
 
   void _showWhatsAppReportDialog(BuildContext context) {
     String hourlyTimeString =
@@ -79,21 +131,21 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
                   date: selectedDate,
                   time: hourlyTimeString,
                   reservoirLevel:
-                      double.tryParse(currentLevelController.text) ?? 0.0,
+                      round2Dec(currentLevelController.text),
                   desiltingLevel:
-                      double.tryParse(desiltingLevelController.text) ?? 0.0,
+                      round2Dec(desiltingLevelController.text),
                   downstreamLevel: 0.0,
-                  netHeadLoss: desiltingLevelDifference,
-                  averageHourlyLoad: double.tryParse(loadController.text) ?? 0.0,
-                  inflow: inflowDischarge,
-                  totalBarrageOutflow: barrageWaterRelease,
-                  rg1Discharge: rg1Discharge,
-                  rg2Discharge: rg2Discharge,
-                  rg3Discharge: rg3Discharge,
-                  fdrgDischarge: fdrg,
-                  sftDischarge: sft + sft,
-                  fishPassDischarge: fishpassChannel + fishpassPipe,
-                  eflowPipeDischarge: eflow,
+                  netHeadLoss: round2Dec(desiltingLevelDifference),
+                  averageHourlyLoad: round2Dec(loadController.text),
+                  inflow: round2Dec(inflowDischarge),
+                  totalBarrageOutflow: round2Dec(barrageWaterRelease),
+                  rg1Discharge: round2Dec(rg1Discharge),
+                  rg2Discharge: round2Dec(rg2Discharge),
+                  rg3Discharge: round2Dec(rg3Discharge),
+                  fdrgDischarge: round2Dec(fdrg),
+                  sftDischarge: round2Dec(sft1Discharge + sft2Discharge),
+                  fishPassDischarge: round2Dec(fishpassChannel + fishpassPipe),
+                  eflowPipeDischarge: round2Dec(eflow),
                   finalConcDateTime: finalConcDateTime,
                   concentrationController: concentrationController,
                   weather: selectedWeather,
@@ -114,11 +166,11 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
                 String report2 = WhatsappReportService.formatReport2(
                   date: selectedDate,
                   time: hourlyTimeString,
-                  riverDischarge: inflowDischarge,
-                  totalBarrageOutflow: barrageWaterRelease,
-                  powerhouseDischarge: powerHouseDischarge,
+                  riverDischarge: round2Dec(inflowDischarge),
+                  totalBarrageOutflow: round2Dec(barrageWaterRelease),
+                  powerhouseDischarge: round2Dec(powerHouseDischarge),
                   reservoirLevel:
-                      double.tryParse(currentLevelController.text) ?? 0.0,
+                      round2Dec(currentLevelController.text),
                   weather: selectedWeather,
                 );
                 _copyToClipboard(context, report2, "Format 2");
@@ -135,9 +187,9 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
                   date: selectedDate,
                   time: hourlyTimeString,
                   reservoirLevel:
-                      double.tryParse(currentLevelController.text) ?? 0.0,
-                  inflow: inflowDischarge,
-                  barrageOutflow: barrageWaterRelease,
+                      round2Dec(currentLevelController.text),
+                  inflow: round2Dec(inflowDischarge),
+                  barrageOutflow: round2Dec(barrageWaterRelease),
                   weather: selectedWeather,
                 );
                 _copyToClipboard(context, report3, "Format 3");
@@ -200,7 +252,8 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
   double fishpassPipe = 0.0;
   double fishpassChannel = 0.0;
   double eflow = 0.0;
-  double sft = 0.0;
+  double sft1Discharge = 0.0;
+  double sft2Discharge = 0.0;
   double fdrg = 0.0;
 
   double calculateRadialGateDischarge(
@@ -228,9 +281,10 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
       gateOpeningMm: freeflowOpeningMm,
     );
 
-    return ((gatedDischarge * gatedMins) +
+    double discharge = ((gatedDischarge * gatedMins) +
             (freeflowDischarge * freeflowMins)) /
         60.0;
+    return round2Dec(discharge);
   }
 
   double barrageWaterRelease = 0.0;
@@ -274,15 +328,15 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
   }
 
   void calculateDischarge() {
-    final previous = double.tryParse(previousLevelController.text) ?? 0.0;
-    final current = double.tryParse(currentLevelController.text) ?? 0.0;
-    final currentLevel = double.tryParse(currentLevelController.text) ?? 0.0;
-    final desiltingLevel = double.tryParse(desiltingLevelController.text) ?? 0.0;
+    final previous = round2Dec(previousLevelController.text);
+    final current = round2Dec(currentLevelController.text);
+    final currentLevel = round2Dec(currentLevelController.text);
+    final desiltingLevel = round2Dec(desiltingLevelController.text);
 
-    desiltingLevelDifference = (currentLevel - desiltingLevel);
+    desiltingLevelDifference = round2Dec(currentLevel - desiltingLevel);
 
     double gateReservoirLevel =
-        double.tryParse(reservoirLevelController.text) ?? 0;
+        round2Dec(reservoirLevelController.text);
 
     if (gateReservoirLevel < 1263) {
       factorF = 9.06;
@@ -296,7 +350,7 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
       factorF = 15.25;
     }
 
-    final load = double.tryParse(loadController.text) ?? 0.0;
+    final load = round2Dec(loadController.text);
 
     double divisor;
     if (previous >= 1264 && current >= 1264) {
@@ -306,7 +360,7 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
     } else {
       divisor = 0.785;
     }
-    powerHouseDischarge = divisor == 0 ? 0 : load / divisor;
+    powerHouseDischarge = divisor == 0 ? 0.0 : round2Dec(load / divisor);
 
     rg1Discharge = calculateRadialGateDischarge(
         rg1Controller,
@@ -328,71 +382,73 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
         gateReservoirLevel);
 
     if (fishpassPipeAuto) {
-      fishpassPipe =
-          FishpassPipeService.getDischarge(reservoirLevel: gateReservoirLevel);
+      fishpassPipe = round2Dec(
+          FishpassPipeService.getDischarge(reservoirLevel: gateReservoirLevel));
       if (fishpassPipeController.text != fishpassPipe.toStringAsFixed(2)) {
         fishpassPipeController.text = fishpassPipe.toStringAsFixed(2);
       }
     } else {
-      fishpassPipe = double.tryParse(fishpassPipeController.text) ?? 0;
+      fishpassPipe = round2Dec(fishpassPipeController.text);
     }
 
     if (fishpassChannelAuto) {
-      fishpassChannel =
-          FishpassChannelService.getDischarge(reservoirLevel: gateReservoirLevel);
+      fishpassChannel = round2Dec(
+          FishpassChannelService.getDischarge(reservoirLevel: gateReservoirLevel));
       fishpassChannelController.text = fishpassChannel.toStringAsFixed(2);
     } else {
-      fishpassChannel = double.tryParse(fishpassChannelController.text) ?? 0;
+      fishpassChannel = round2Dec(fishpassChannelController.text);
     }
 
     if (eflowAuto) {
-      eflow = EFlowService.getDischarge(reservoirLevel: gateReservoirLevel);
+      eflow = round2Dec(
+          EFlowService.getDischarge(reservoirLevel: gateReservoirLevel));
       eflowController.text = eflow.toStringAsFixed(2);
     } else {
-      eflow = double.tryParse(eflowController.text) ?? 0;
+      eflow = round2Dec(eflowController.text);
     }
 
     if (sft1Auto) {
-      sft = SFTService.getDischarge(
+      double opening1 = round2Dec(sft1Controller.text);
+      sft1Discharge = round2Dec(SFTService.getDischarge(
         waterLevel: gateReservoirLevel,
-        gateOpeningMm: double.tryParse(sft1Controller.text) ?? 0,
-      );
+        gateOpeningMm: opening1,
+      ));
     } else {
-      sft = double.tryParse(sft1Controller.text) ?? 0;
+      sft1Discharge = round2Dec(sft1Controller.text);
     }
 
     if (sft2Auto) {
-      sft = SFTService.getDischarge(
+      double opening2 = round2Dec(sft2Controller.text);
+      sft2Discharge = round2Dec(SFTService.getDischarge(
         waterLevel: gateReservoirLevel,
-        gateOpeningMm: double.tryParse(sft2Controller.text) ?? 0,
-      );
+        gateOpeningMm: opening2,
+      ));
     } else {
-      sft = double.tryParse(sft2Controller.text) ?? 0;
+      sft2Discharge = round2Dec(sft2Controller.text);
     }
-
-    fdrg = FDRGService.getDischarge(
-      gateOpeningMm: double.tryParse(fdrgController.text) ?? 0,
-    );
+    fdrg = round2Dec(FDRGService.getDischarge(
+      gateOpeningMm: round2Dec(fdrgController.text),
+    ));
 
     double levelDifference = (current - previous).abs();
-    storageCorrection = levelDifference * factorF;
+    storageCorrection = round2Dec(levelDifference * factorF);
 
-    barrageWaterRelease = rg1Discharge +
+    barrageWaterRelease = round2Dec(rg1Discharge +
         rg2Discharge +
         rg3Discharge +
         fishpassPipe +
         fishpassChannel +
         eflow +
-        sft +
-        sft +
-        fdrg;
+        sft1Discharge +
+        sft2Discharge +
+        fdrg);
 
-    totalOutflowDischarge = powerHouseDischarge + barrageWaterRelease;
+    totalOutflowDischarge = round2Dec(powerHouseDischarge + barrageWaterRelease);
 
     if (current > previous) {
-      inflowDischarge = totalOutflowDischarge + storageCorrection;
+      inflowDischarge = round2Dec(totalOutflowDischarge + storageCorrection);
     } else if (current < previous) {
-      inflowDischarge = totalOutflowDischarge - storageCorrection;
+      inflowDischarge = round2Dec(totalOutflowDischarge - storageCorrection);
     } else {
       inflowDischarge = totalOutflowDischarge;
     }
@@ -401,102 +457,82 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
   }
 
   Future<void> saveReading() async {
-    final prefs = await SharedPreferences.getInstance();
-    List<String> readings = prefs.getStringList('hourly_readings') ?? [];
-    List<String> pendingQueue = prefs.getStringList('pending_sync_queue') ?? [];
+    calculateDischarge();
 
     String hourlyTimeString =
         "${selectedTime.hour.toString().padLeft(2, '0')}:00";
+    String formattedDate =
+        "${selectedDate.day.toString().padLeft(2, '0')}-${selectedDate.month.toString().padLeft(2, '0')}-${selectedDate.year}";
+    String docId = "${formattedDate}_$hourlyTimeString";
 
-    final reading = {
-      "date":
-          "${selectedDate.day.toString().padLeft(2, '0')}-${selectedDate.month.toString().padLeft(2, '0')}-${selectedDate.year}",
+    final readingData = {
+      "date": formattedDate,
       "time": hourlyTimeString,
-      "currentLevel": currentLevelController.text,
-      "avgLoad": loadController.text,
-      "powerHouseDischarge": powerHouseDischarge.toStringAsFixed(2),
-      "rg1": rg1Discharge.toStringAsFixed(2),
-      "rg2": rg2Discharge.toStringAsFixed(2),
-      "rg3": rg3Discharge.toStringAsFixed(2),
-      "sft1": sft.toStringAsFixed(2),
-      "sft2": sft.toStringAsFixed(2),
-      "eflow": eflow.toStringAsFixed(2),
-      "fdrg": fdrg.toStringAsFixed(2),
-      "barrageOutflow": barrageWaterRelease.toStringAsFixed(2),
-      "totalOutflow": totalOutflowDischarge.toStringAsFixed(2),
-      "inflow": inflowDischarge.toStringAsFixed(2),
+      "timestamp": DateTime.now().toIso8601String(),
+      "currentLevel": round2Dec(currentLevelController.text),
+      "previousLevel": round2Dec(previousLevelController.text),
+      "desiltingLevel": round2Dec(desiltingLevelController.text),
+      "avgLoad": round2Dec(loadController.text),
+      "powerHouseDischarge": round2Dec(powerHouseDischarge),
+      "rg1": round2Dec(rg1Discharge),
+      "rg2": round2Dec(rg2Discharge),
+      "rg3": round2Dec(rg3Discharge),
+      "sft1": round2Dec(sft1Discharge),
+      "sft2": round2Dec(sft2Discharge),
+      "fishpassPipe": round2Dec(fishpassPipe),
+      "fishpassChannel": round2Dec(fishpassChannel),
+      "eflow": round2Dec(eflow),
+      "fdrg": round2Dec(fdrg),
+      "barrageOutflow": round2Dec(barrageWaterRelease),
+      "totalOutflow": round2Dec(totalOutflowDischarge),
+      "inflow": round2Dec(inflowDischarge),
+      "weather": selectedWeather,
+      "concentration": round2Dec(concentrationController.text),
     };
 
-    readings.add(jsonEncode(reading));
-    await prefs.setStringList('hourly_readings', readings);
+    try {
+      await FirebaseFirestore.instance
+          .collection('barrage_readings')
+          .doc(docId)
+          .set(readingData, SetOptions(merge: true));
 
-    var connectivityResult = await (Connectivity().checkConnectivity());
-    bool isConnected = !connectivityResult.contains(ConnectivityResult.none);
+      final prefs = await SharedPreferences.getInstance();
+      List<String> readings = prefs.getStringList('hourly_readings') ?? [];
+      readings.add(jsonEncode(readingData));
+      await prefs.setStringList('hourly_readings', readings);
 
-    if (isConnected) {
-      bool success = await _sendToGoogleSheet(reading);
-      if (!success) {
-        pendingQueue.add(jsonEncode(reading));
-        await prefs.setStringList('pending_sync_queue', pendingQueue);
-      }
-    } else {
-      pendingQueue.add(jsonEncode(reading));
-      await prefs.setStringList('pending_sync_queue', pendingQueue);
-      debugPrint("No internet. Saved to offline sync queue.");
-    }
+      _sendToGoogleSheetSafely(readingData);
 
-    if (!mounted) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(isConnected
-            ? "Reading Saved & Synced!"
-            : "Offline: Saved Locally & Queued for Sync!"),
-        backgroundColor: isConnected ? Colors.green : Colors.orange,
-      ),
-    );
-  }
-
-  Future<void> syncPendingQueue() async {
-    final prefs = await SharedPreferences.getInstance();
-    List<String> pendingQueue = prefs.getStringList('pending_sync_queue') ?? [];
-
-    if (pendingQueue.isEmpty) return;
-
-    var connectivityResult = await (Connectivity().checkConnectivity());
-    if (connectivityResult.contains(ConnectivityResult.none)) return;
-
-    List<String> stillPending = [];
-
-    for (String itemStr in pendingQueue) {
-      Map<String, dynamic> reading = jsonDecode(itemStr);
-      bool success = await _sendToGoogleSheet(reading);
-      if (!success) {
-        stillPending.add(itemStr);
-      }
-    }
-
-    await prefs.setStringList('pending_sync_queue', stillPending);
-
-    if (stillPending.length < pendingQueue.length) {
-      debugPrint("Successfully synced offline queue items to Google Sheets!");
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Reading saved successfully for $hourlyTimeString!"),
+          backgroundColor: Colors.teal.shade700,
+        ),
+      );
+    } catch (e) {
+      debugPrint("Save error: $e");
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Save failed: $e"),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
-  Future<bool> _sendToGoogleSheet(Map<String, dynamic> reading) async {
+  void _sendToGoogleSheetSafely(Map<String, dynamic> data) async {
     try {
       final uri = Uri.parse(
-              "https://script.google.com/macros/s/AKfycbxyd30kmNaKX-BzRx187Rf7Si4hGgA9qdIxUgvUOw9xOW0letGpOCVTxpH2en9ALAXo4A/exec")
-          .replace(
-        queryParameters:
-            reading.map((key, value) => MapEntry(key, value.toString())),
+        "https://script.google.com/macros/s/AKfycbxyd30kmNaKX-BzRx187Rf7Si4hGgA9qdIxUgvUOw9xOW0letGpOCVTxpH2en9ALAXo4A/exec",
+      ).replace(
+        queryParameters: data.map((key, value) => MapEntry(key, value.toString())),
       );
 
-      final response = await http.get(uri);
-      return response.statusCode == 200;
+      await http.get(uri).timeout(const Duration(seconds: 5));
     } catch (e) {
-      debugPrint("Google Sheet sync error: $e");
-      return false;
+      debugPrint("Google Sheets sync bypassed or timed out: $e");
     }
   }
 
@@ -562,7 +598,7 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(title),
-          Text("${value.toStringAsFixed(2)} m³/s"),
+          Text("${round2Dec(value).toStringAsFixed(2)} m³/s"),
         ],
       ),
     );
@@ -583,7 +619,6 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Top Clean Header Card
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -606,7 +641,6 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
               ),
             ),
             const SizedBox(height: 20),
-
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(12),
@@ -627,6 +661,7 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
                             setState(() {
                               selectedDate = pickedDate;
                             });
+                            autoFetchPreviousLevel();
                           }
                         },
                       ),
@@ -655,6 +690,7 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
                                 minute: 0,
                               );
                             });
+                            autoFetchPreviousLevel();
                           }
                         },
                       ),
@@ -666,17 +702,17 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 10),
               child: DropdownButtonFormField<String>(
-                value: selectedWeather,
+                initialValue: selectedWeather,
                 decoration: const InputDecoration(
                   labelText: "Weather Condition",
                   border: OutlineInputBorder(),
                 ),
                 items: const [
-                  DropdownMenuItem(value: 'Clear', child: Text("clear ☀️")),
+                  DropdownMenuItem(value: 'Clear', child: Text("Clear ☀️")),
                   DropdownMenuItem(value: 'cloudy', child: Text("Cloudy ☁️")),
                   DropdownMenuItem(value: 'rainy', child: Text("Rainy 🌧️")),
                   DropdownMenuItem(
-                      value: 'heavy rainy', child: Text("heavy rainy ⛈️")),
+                      value: 'heavy rainy', child: Text("Heavy Rainy ⛈️")),
                 ],
                 onChanged: (String? newWeather) {
                   if (newWeather != null) {
@@ -693,29 +729,45 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
                 padding: const EdgeInsets.all(16.0),
                 child: Column(
                   children: [
-                    InputField(
-                      label: "Previous Reservoir Level (m)",
-                      controller: previousLevelController,
+                    Row(
+                      children: [
+                        Expanded(
+                          child: InputField(
+                            label: "Previous Reservoir Level (m)",
+                            controller: previousLevelController,
+                            onChanged: (value) => calculateDischarge(),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.sync, color: Color(0xFF1E3A8A)),
+                          tooltip: "Fetch last hour's level from Firestore",
+                          onPressed: autoFetchPreviousLevel,
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 15),
                     InputField(
                       label: "Current Reservoir Level (m)",
                       controller: currentLevelController,
+                      onChanged: (value) => calculateDischarge(),
                     ),
                     const SizedBox(height: 15),
                     InputField(
                       label: "Desilting Level (m)",
                       controller: desiltingLevelController,
+                      onChanged: (value) => calculateDischarge(),
                     ),
                     const SizedBox(height: 15),
                     InputField(
                       label: "Average Load (MW)",
                       controller: loadController,
+                      onChanged: (value) => calculateDischarge(),
                     ),
                     const SizedBox(height: 15),
                     InputField(
                       label: "Reservoir Level for Other Discharges (m)",
                       controller: reservoirLevelController,
+                      onChanged: (value) => calculateDischarge(),
                     ),
                   ],
                 ),
@@ -916,7 +968,6 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
                                 setState(() {
                                   sft2Auto = value;
                                 });
-                                calculateDischarge();
                               },
                             ),
                           ],
@@ -1047,10 +1098,10 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
                     const Divider(),
                     resultRow("E-FLOW DISCHARGE", eflow),
                     const Divider(),
-                    resultRow("SFT-1 DISCHARGE", sft),
-                    resultRow("SFT-2 DISCHARGE", sft),
+                    resultRow("SFT-1 DISCHARGE", sft1Discharge),
+                    resultRow("SFT-2 DISCHARGE", sft2Discharge),
                     const Divider(),
-                    resultRow("TOTAL SFT DISCHARGE", sft + sft),
+                    resultRow("TOTAL SFT DISCHARGE", sft1Discharge + sft2Discharge),
                     const Divider(),
                     resultRow("FDRG Discharge", fdrg),
                     const Divider(),

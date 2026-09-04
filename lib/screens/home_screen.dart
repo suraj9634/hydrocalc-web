@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 import 'hourly_calculator_screen.dart';
 import 'history_screen.dart';
 import 'daily_summary_screen.dart';
+import 'analytics_screen.dart'; // Import the file you just created
 
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
 
   @override
-
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
@@ -38,70 +38,98 @@ class HomePage extends StatelessWidget {
 
             const SizedBox(height: 40),
 
+            // Hourly Calculator Button
             SizedBox(
               width: double.infinity,
               height: 55,
               child: ElevatedButton(
-               onPressed: () {
-  Navigator.push(
-    context,
-    MaterialPageRoute(
-      builder: (context) => const HourlyCalculatorScreen(),
-    ),
-  );
-},
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const HourlyCalculatorScreen(),
+                    ),
+                  );
+                },
                 child: const Text("Hourly Calculator"),
               ),
             ),
 
             const SizedBox(height: 15),
 
-           SizedBox(
-            width: double.infinity,
-            height: 55,
-          child: ElevatedButton(
-            onPressed: () {
-            Navigator.push(
-            context,
-           MaterialPageRoute(builder: (context) => const HistoryScreen()),
-             );
-              },
-             child: const Text(
-              "History",
-              style: TextStyle(fontSize: 18),
-             ),
+            // History Button
+            SizedBox(
+              width: double.infinity,
+              height: 55,
+              child: ElevatedButton(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const HistoryScreen()),
+                  );
+                },
+                child: const Text(
+                  "History",
+                  style: TextStyle(fontSize: 18),
+                ),
               ),
-              ),
+            ),
 
             const SizedBox(height: 15),
 
-      
+            // Daily Summary Button
+            SizedBox(
+              width: double.infinity,
+              height: 55,
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF1E3A8A),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                icon: const Icon(Icons.analytics_outlined),
+                label: const Text(
+                  "DAILY SUMMARY",
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const DailySummaryScreen(),
+                    ),
+                  );
+                },
+              ),
+            ),
 
-// 2. Find your "Daily Summary" button inside the build method and update its onPressed:
-SizedBox(
-  width: double.infinity,
-  height: 55,
-  child: ElevatedButton.icon(
-    style: ElevatedButton.styleFrom(
-      backgroundColor: const Color(0xFF1E3A8A),
-      foregroundColor: Colors.white,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-    ),
-    icon: const Icon(Icons.analytics_outlined),
-    label: const Text(
-      "DAILY SUMMARY",
-      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-    ),
-    onPressed: () {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => const DailySummaryScreen(),
-        ),
-      );
-    },
-  ),
-),
+            const SizedBox(height: 15),
+
+            // Trend Analytics Button (NEW)
+            SizedBox(
+              width: double.infinity,
+              height: 55,
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.teal,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                icon: const Icon(Icons.show_chart),
+                label: const Text(
+                  "TREND ANALYTICS",
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const AnalyticsScreen(),
+                    ),
+                  );
+                },
+              ),
+            ),
 
             const Spacer(),
 

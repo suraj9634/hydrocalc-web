@@ -40,8 +40,13 @@ class _LoginScreenState extends State<LoginScreen> {
         isAuthenticated = true;
         if (username == "supervisor") {
           userRole = "Supervisor";
+        // ignore: curly_braces_in_flow_control_structures
+        // ignore: curly_braces_in_flow_control_structures
+        // ignore: curly_braces_in_flow_control_structures
         } else if (username == "groupa") userRole = "Group A";
+        // ignore: curly_braces_in_flow_control_structures
         else if (username == "groupb") userRole = "Group B";
+        // ignore: curly_braces_in_flow_control_structures
         else if (username == "groupc") userRole = "Group C";
         else if (username == "groupd") userRole = "Group D";
       }

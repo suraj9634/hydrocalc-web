@@ -69,7 +69,8 @@ class SFTService {
     ],
 
   };
-    static double interpolate(
+
+  static double interpolate(
       double x,
       double x1,
       double x2,
@@ -84,15 +85,17 @@ class SFTService {
   }
 
   static double getDischarge({
-
     required double waterLevel,
     required double gateOpeningMm,
-
   }) {
 
     double opening = gateOpeningMm / 1000;
 
-    if (opening < 0.15 || opening > 1.50) {
+    if (opening < 0 || opening > 1.50) {
+      return 0;
+    }
+
+    if (opening == 0) {
       return 0;
     }
 
@@ -103,6 +106,44 @@ class SFTService {
 
     List<double> openings =
         dischargeTable.keys.toList()..sort();
+
+    // Handle openings below the first table key (0.15m) by scaling from 0
+    if (opening < openings.first) {
+      double upperOpening = openings.first;
+      double lowerLevel = waterLevels.first;
+      double upperLevel = waterLevels.last;
+
+      for (int i = 0; i < waterLevels.length - 1; i++) {
+        if (waterLevel >= waterLevels[i] &&
+            waterLevel <= waterLevels[i + 1]) {
+          lowerLevel = waterLevels[i];
+          upperLevel = waterLevels[i + 1];
+          break;
+        }
+      }
+
+      int li = waterLevels.indexOf(lowerLevel);
+      int ui = waterLevels.indexOf(upperLevel);
+
+      double q21 = dischargeTable[upperOpening]![li];
+      double q22 = dischargeTable[upperOpening]![ui];
+
+      double upperResult = interpolate(
+        waterLevel,
+        lowerLevel,
+        upperLevel,
+        q21,
+        q22,
+      );
+
+      return interpolate(
+        opening,
+        0.0,
+        upperOpening,
+        0.0,
+        upperResult,
+      );
+    }
 
     double lowerOpening = openings.first;
     double upperOpening = openings.last;
@@ -165,7 +206,6 @@ class SFTService {
       upperResult,
     );
 
-    return singleSFT ;
+    return singleSFT;
   }
-
 }
