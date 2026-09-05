@@ -10,67 +10,69 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _passController = TextEditingController();
   final FirebaseAuth _auth = FirebaseAuth.instance;
-
-  String _selectedGroup = 'Group A';
   bool _isLoading = false;
   String _errorMessage = '';
 
-  // Maps clean UI labels to internal Firebase Auth user emails
-  final Map<String, String> _groupEmails = {
-    'Supervisor': 'supervisor@hydrocalc.local',
-    'Group A': 'groupa@hydrocalc.local',
-    'Group B': 'groupb@hydrocalc.local',
-    'Group C': 'groupc@hydrocalc.local',
-    'Group D': 'groupd@hydrocalc.local',
-  };
+  // Optional: Whitelist specific operator emails (Leave empty to allow all Google sign-ins)
+  final List<String> _allowedOperatorEmails = [
+    // 'operator1@gmail.com',
+    // 'operator2@gmail.com',
+  ];
 
-  @override
-  void dispose() {
-    _passController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _handleLogin() async {
+  Future<void> _handleGoogleSignIn() async {
     setState(() {
       _isLoading = true;
       _errorMessage = '';
     });
 
-    final email = _groupEmails[_selectedGroup]!;
-    final password = _passController.text.trim();
-
     try {
-      await _auth.signInWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
+      // Initialize the Google Auth Provider for Web
+      GoogleAuthProvider googleProvider = GoogleAuthProvider();
+      googleProvider.addScope('email');
+      googleProvider.setCustomParameters({'prompt': 'select_account'});
 
-      if (!mounted) return;
+      // Triggers browser pop-up for account selection
+      UserCredential userCredential = await _auth.signInWithPopup(googleProvider);
+      final user = userCredential.user;
 
-      // Navigate to HomePage and forward the authenticated shift label
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) => HomePage(currentRole: _selectedGroup),
-        ),
-      );
+      if (user != null) {
+        // Verification: check whitelist if configured
+        if (_allowedOperatorEmails.isNotEmpty && !_allowedOperatorEmails.contains(user.email?.toLowerCase())) {
+          await _auth.signOut();
+          setState(() {
+            _errorMessage = 'Access denied: ${user.email} is not registered as an authorized operator.';
+            _isLoading = false;
+          });
+          return;
+        }
+
+        if (!mounted) return;
+
+        // Route to HomePage with the operator's name/email as currentRole
+        final roleOrName = user.displayName ?? user.email ?? 'Operator';
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => HomePage(currentRole: roleOrName),
+          ),
+        );
+      }
     } on FirebaseAuthException catch (e) {
       setState(() {
-        if (e.code == 'wrong-password' || e.code == 'invalid-credential') {
-          _errorMessage = 'Incorrect password for $_selectedGroup.';
-        } else if (e.code == 'user-not-found') {
-          _errorMessage = 'User not configured in Firebase Console.';
-        } else if (e.code == 'network-request-failed') {
-          _errorMessage = 'Network connection failed. Check your internet.';
+        if (e.code == 'popup-closed-by-user') {
+          _errorMessage = 'Sign-in cancelled by user.';
+        } else if (e.code == 'popup-blocked') {
+          _errorMessage = 'Sign-in popup blocked by browser. Please allow popups for this site.';
+        } else if (e.code == 'unauthorized-domain') {
+          _errorMessage = 'Domain not authorized in Firebase Console settings.';
         } else {
-          _errorMessage = e.message ?? 'Authentication failed.';
+          _errorMessage = e.message ?? 'Google authentication failed.';
         }
       });
-    } catch (_) {
+    } catch (e) {
       setState(() {
-        _errorMessage = 'An unexpected error occurred. Please try again.';
+        _errorMessage = 'An unexpected error occurred: $e';
       });
     } finally {
       if (mounted) {
@@ -94,7 +96,7 @@ class _LoginScreenState extends State<LoginScreen> {
           child: SingleChildScrollView(
             child: Container(
               width: 400,
-              padding: const EdgeInsets.all(28.0),
+              padding: const EdgeInsets.all(32.0),
               margin: const EdgeInsets.symmetric(horizontal: 16),
               decoration: BoxDecoration(
                 color: Colors.white,
@@ -112,98 +114,92 @@ class _LoginScreenState extends State<LoginScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const CircleAvatar(
-                    radius: 30,
+                    radius: 32,
                     backgroundColor: Color(0xFF1E3A8A),
-                    child: Icon(Icons.water_drop, size: 32, color: Colors.white),
+                    child: Icon(Icons.water_drop, size: 36, color: Colors.white),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 18),
                   const Text(
                     "HydroCalc Portal",
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      fontSize: 22,
+                      fontSize: 24,
                       fontWeight: FontWeight.bold,
                       color: Color(0xFF1E3A8A),
                     ),
                   ),
                   const SizedBox(height: 6),
                   const Text(
-                    "Select operational group and sign in",
+                    "Barrage Operations & Discharge Monitoring",
                     textAlign: TextAlign.center,
                     style: TextStyle(color: Colors.grey, fontSize: 13),
                   ),
-                  const SizedBox(height: 24),
-                  DropdownButtonFormField<String>(
-                    value: _selectedGroup,
-                    decoration: InputDecoration(
-                      labelText: "Operating Group",
-                      filled: true,
-                      fillColor: Colors.grey[100],
-                      prefixIcon: const Icon(Icons.group, color: Color(0xFF1E3A8A)),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: BorderSide.none,
-                      ),
-                    ),
-                    items: _groupEmails.keys.map((group) {
-                      return DropdownMenuItem(value: group, child: Text(group));
-                    }).toList(),
-                    onChanged: (val) {
-                      if (val != null) setState(() => _selectedGroup = val);
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: _passController,
-                    obscureText: true,
-                    onSubmitted: (_) => _handleLogin(),
-                    decoration: InputDecoration(
-                      labelText: "Shift Password",
-                      filled: true,
-                      fillColor: Colors.grey[100],
-                      prefixIcon: const Icon(Icons.lock_outline, color: Color(0xFF1E3A8A)),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: BorderSide.none,
-                      ),
-                    ),
-                  ),
-                  if (_errorMessage.isNotEmpty) ...[
-                    const SizedBox(height: 12),
-                    Text(
-                      _errorMessage,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: Colors.red,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 24),
-                  ElevatedButton(
-                    onPressed: _isLoading ? null : _handleLogin,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF1E3A8A),
-                      foregroundColor: Colors.white,
+                  const SizedBox(height: 32),
+
+                  // Google Sign-In Button
+                  OutlinedButton(
+                    onPressed: _isLoading ? null : _handleGoogleSignIn,
+                    style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 14),
+                      side: const BorderSide(color: Color(0xFFDADCE0), width: 1.5),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10),
                       ),
+                      backgroundColor: Colors.white,
                     ),
                     child: _isLoading
                         ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 2,
-                            ),
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : const Text(
-                            "Access Portal",
-                            style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                        : Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Image.network(
+                                'https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg',
+                                height: 22,
+                                width: 22,
+                                errorBuilder: (_, __, ___) => const Icon(Icons.account_circle, color: Colors.red),
+                              ),
+                              const SizedBox(width: 12),
+                              const Text(
+                                "Sign in with Google",
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF3C4043),
+                                ),
+                              ),
+                            ],
                           ),
+                  ),
+
+                  if (_errorMessage.isNotEmpty) ...[
+                    const SizedBox(height: 18),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.red.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        _errorMessage,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Colors.red,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+
+                  const SizedBox(height: 28),
+                  const Text(
+                    "Authorized operators only",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.grey, fontSize: 12),
                   ),
                 ],
               ),
