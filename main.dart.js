@@ -103433,7 +103433,7 @@ A.te.prototype={
 af(){var s=$.am(),r=$.bW,q=(r==null?$.bW=$.dQ():r).e2("[DEFAULT]")
 A.cr(q,$.dC(),!0)
 r=t.N
-return new A.JU(new A.cZ(B.aJ,s),A.aQA(new A.db(q)),A.aF(["Supervisor","supervisor@hydrocalc.local","Group A","groupa@hydrocalc.local","Group B","groupb@hydrocalc.local","Group C","groupc@hydrocalc.local","Group D","groupd@hydrocalc.local"],r,r))}}
+return new A.JU(new A.cZ(B.aJ,s),A.aQA(new A.db(q)),A.aF(["Supervisor","supervisor@nmhps.local","Group A","groupa@nmhps.local","Group B","groupb@nmhps.local","Group C","groupc@nmhps.local","Group D","groupd@nmhps.local"],r,r))}}
 A.JU.prototype={
 l(){var s=this.d
 s.M$=$.am()
