@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'home_screen.dart'; // Make sure this points to your home page file
+import 'package:firebase_auth/firebase_auth.dart';
+import 'home_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -9,64 +10,74 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _idController = TextEditingController();
   final _passController = TextEditingController();
-  
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+
+  String _selectedGroup = 'Group A';
   bool _isLoading = false;
   String _errorMessage = '';
 
-  final Map<String, String> _shiftCredentials = {
-    "supervisor": "admin123",
-    "groupa": "a123",
-    "groupb": "b123",
-    "groupc": "c123",
-    "groupd": "d123",
+  // Maps clean UI labels to internal Firebase Auth user emails
+  final Map<String, String> _groupEmails = {
+    'Supervisor': 'supervisor@hydrocalc.local',
+    'Group A': 'groupa@hydrocalc.local',
+    'Group B': 'groupb@hydrocalc.local',
+    'Group C': 'groupc@hydrocalc.local',
+    'Group D': 'groupd@hydrocalc.local',
   };
 
-  void _handleLogin() {
+  @override
+  void dispose() {
+    _passController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _handleLogin() async {
     setState(() {
       _isLoading = true;
       _errorMessage = '';
     });
 
-    Future.delayed(const Duration(milliseconds: 800), () {
-      final username = _idController.text.trim().toLowerCase();
-      final password = _passController.text.trim();
+    final email = _groupEmails[_selectedGroup]!;
+    final password = _passController.text.trim();
 
-      bool isAuthenticated = false;
-      String userRole = '';
+    try {
+      await _auth.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
 
-      if (_shiftCredentials.containsKey(username) && _shiftCredentials[username] == password) {
-        isAuthenticated = true;
-        if (username == "supervisor") {
-          userRole = "Supervisor";
-        // ignore: curly_braces_in_flow_control_structures
-        // ignore: curly_braces_in_flow_control_structures
-        // ignore: curly_braces_in_flow_control_structures
-        } else if (username == "groupa") userRole = "Group A";
-        // ignore: curly_braces_in_flow_control_structures
-        else if (username == "groupb") userRole = "Group B";
-        // ignore: curly_braces_in_flow_control_structures
-        else if (username == "groupc") userRole = "Group C";
-        else if (username == "groupd") userRole = "Group D";
+      if (!mounted) return;
+
+      // Navigate to HomePage and forward the authenticated shift label
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => HomePage(currentRole: _selectedGroup),
+        ),
+      );
+    } on FirebaseAuthException catch (e) {
+      setState(() {
+        if (e.code == 'wrong-password' || e.code == 'invalid-credential') {
+          _errorMessage = 'Incorrect password for $_selectedGroup.';
+        } else if (e.code == 'user-not-found') {
+          _errorMessage = 'User not configured in Firebase Console.';
+        } else if (e.code == 'network-request-failed') {
+          _errorMessage = 'Network connection failed. Check your internet.';
+        } else {
+          _errorMessage = e.message ?? 'Authentication failed.';
+        }
+      });
+    } catch (_) {
+      setState(() {
+        _errorMessage = 'An unexpected error occurred. Please try again.';
+      });
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
       }
-
-      if (isAuthenticated) {
-        // Routes straight to your Home Page
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (context) => const HomePage(), 
-          ),
-        );
-      } else {
-        setState(() {
-          _errorMessage = 'Invalid Group ID or Password. Please try again.';
-          _isLoading = false;
-        });
-      }
-    });
-  } // <-- Added the missing closing brace here for _handleLogin()
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -82,16 +93,17 @@ class _LoginScreenState extends State<LoginScreen> {
         child: Center(
           child: SingleChildScrollView(
             child: Container(
-              width: 420,
-              padding: const EdgeInsets.all(32.0),
+              width: 400,
+              padding: const EdgeInsets.all(28.0),
+              margin: const EdgeInsets.symmetric(horizontal: 16),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.95),
+                color: Colors.white,
                 borderRadius: BorderRadius.circular(16.0),
                 boxShadow: const [
                   BoxShadow(
-                    color: Colors.black45,
-                    blurRadius: 15,
-                    offset: Offset(0, 8),
+                    color: Colors.black26,
+                    blurRadius: 16,
+                    offset: Offset(0, 6),
                   ),
                 ],
               ),
@@ -99,70 +111,72 @@ class _LoginScreenState extends State<LoginScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Center(
-                    child: CircleAvatar(
-                      radius: 32,
-                      backgroundColor: Colors.blueAccent,
-                      child: Icon(Icons.water_drop, size: 36, color: Colors.white),
-                    ),
+                  const CircleAvatar(
+                    radius: 30,
+                    backgroundColor: Color(0xFF1E3A8A),
+                    child: Icon(Icons.water_drop, size: 32, color: Colors.white),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 16),
                   const Text(
-                    "Barrage Operations Portal",
+                    "HydroCalc Portal",
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      fontSize: 24,
+                      fontSize: 22,
                       fontWeight: FontWeight.bold,
                       color: Color(0xFF1E3A8A),
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 6),
                   const Text(
-                    "Sign in with your shift group credentials",
+                    "Select operational group and sign in",
                     textAlign: TextAlign.center,
                     style: TextStyle(color: Colors.grey, fontSize: 13),
                   ),
-                  const SizedBox(height: 30),
-                  TextField(
-                    controller: _idController,
+                  const SizedBox(height: 24),
+                  DropdownButtonFormField<String>(
+                    value: _selectedGroup,
                     decoration: InputDecoration(
-                      labelText: "Group ID (e.g., groupa, supervisor)",
+                      labelText: "Operating Group",
                       filled: true,
                       fillColor: Colors.grey[100],
+                      prefixIcon: const Icon(Icons.group, color: Color(0xFF1E3A8A)),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
                         borderSide: BorderSide.none,
                       ),
-                      prefixIcon: const Icon(Icons.badge, color: Colors.blueAccent),
                     ),
+                    items: _groupEmails.keys.map((group) {
+                      return DropdownMenuItem(value: group, child: Text(group));
+                    }).toList(),
+                    onChanged: (val) {
+                      if (val != null) setState(() => _selectedGroup = val);
+                    },
                   ),
                   const SizedBox(height: 16),
                   TextField(
                     controller: _passController,
                     obscureText: true,
+                    onSubmitted: (_) => _handleLogin(),
                     decoration: InputDecoration(
-                      labelText: "Password",
+                      labelText: "Shift Password",
                       filled: true,
                       fillColor: Colors.grey[100],
+                      prefixIcon: const Icon(Icons.lock_outline, color: Color(0xFF1E3A8A)),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
                         borderSide: BorderSide.none,
                       ),
-                      prefixIcon: const Icon(Icons.lock_outline, color: Colors.blueAccent),
                     ),
                   ),
                   if (_errorMessage.isNotEmpty) ...[
-                    const SizedBox(height: 14),
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: Colors.red[50],
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        _errorMessage,
-                        style: const TextStyle(color: Colors.red, fontSize: 13, fontWeight: FontWeight.w500),
-                        textAlign: TextAlign.center,
+                    const SizedBox(height: 12),
+                    Text(
+                      _errorMessage,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Colors.red,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
                   ],
@@ -172,24 +186,23 @@ class _LoginScreenState extends State<LoginScreen> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF1E3A8A),
                       foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      elevation: 3,
                     ),
                     child: _isLoading
                         ? const SizedBox(
-                            width: 20,
-                            height: 20,
+                            width: 18,
+                            height: 18,
                             child: CircularProgressIndicator(
                               color: Colors.white,
                               strokeWidth: 2,
                             ),
                           )
                         : const Text(
-                            "Secure Login",
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                            "Access Portal",
+                            style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
                           ),
                   ),
                 ],
