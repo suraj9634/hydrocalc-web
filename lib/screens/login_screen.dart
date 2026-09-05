@@ -10,69 +10,74 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  final _emailController = TextEditingController();
+  final _passController = TextEditingController();
   final FirebaseAuth _auth = FirebaseAuth.instance;
+
   bool _isLoading = false;
+  bool _obscurePassword = true;
   String _errorMessage = '';
 
-  // Optional: Whitelist specific operator emails (Leave empty to allow all Google sign-ins)
-  final List<String> _allowedOperatorEmails = [
-    // 'operator1@gmail.com',
-    // 'operator2@gmail.com',
-  ];
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passController.dispose();
+    super.dispose();
+  }
 
-  Future<void> _handleGoogleSignIn() async {
+  Future<void> _handleLogin() async {
+    final email = _emailController.text.trim();
+    final password = _passController.text.trim();
+
+    if (email.isEmpty || password.isEmpty) {
+      setState(() {
+        _errorMessage = 'Please enter both Gmail address and password.';
+      });
+      return;
+    }
+
     setState(() {
       _isLoading = true;
       _errorMessage = '';
     });
 
     try {
-      // Initialize the Google Auth Provider for Web
-      GoogleAuthProvider googleProvider = GoogleAuthProvider();
-      googleProvider.addScope('email');
-      googleProvider.setCustomParameters({'prompt': 'select_account'});
+      final userCredential = await _auth.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
 
-      // Triggers browser pop-up for account selection
-      UserCredential userCredential = await _auth.signInWithPopup(googleProvider);
       final user = userCredential.user;
+      if (!mounted) return;
 
-      if (user != null) {
-        // Verification: check whitelist if configured
-        if (_allowedOperatorEmails.isNotEmpty && !_allowedOperatorEmails.contains(user.email?.toLowerCase())) {
-          await _auth.signOut();
-          setState(() {
-            _errorMessage = 'Access denied: ${user.email} is not registered as an authorized operator.';
-            _isLoading = false;
-          });
-          return;
-        }
+      // Extract a clean display role (e.g. name or email prefix)
+      final operatorLabel = user?.displayName ?? user?.email ?? email;
 
-        if (!mounted) return;
-
-        // Route to HomePage with the operator's name/email as currentRole
-        final roleOrName = user.displayName ?? user.email ?? 'Operator';
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (context) => HomePage(currentRole: roleOrName),
-          ),
-        );
-      }
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => HomePage(currentRole: operatorLabel),
+        ),
+      );
     } on FirebaseAuthException catch (e) {
       setState(() {
-        if (e.code == 'popup-closed-by-user') {
-          _errorMessage = 'Sign-in cancelled by user.';
-        } else if (e.code == 'popup-blocked') {
-          _errorMessage = 'Sign-in popup blocked by browser. Please allow popups for this site.';
-        } else if (e.code == 'unauthorized-domain') {
-          _errorMessage = 'Domain not authorized in Firebase Console settings.';
+        if (e.code == 'user-not-found') {
+          _errorMessage = 'No registered operator found with this Gmail.';
+        } else if (e.code == 'wrong-password' || e.code == 'invalid-credential') {
+          _errorMessage = 'Incorrect password. Please verify your credentials.';
+        } else if (e.code == 'invalid-email') {
+          _errorMessage = 'Please enter a valid email format (e.g. name@gmail.com).';
+        } else if (e.code == 'user-disabled') {
+          _errorMessage = 'This operator account has been disabled.';
+        } else if (e.code == 'network-request-failed') {
+          _errorMessage = 'Network error. Please check your internet connection.';
         } else {
-          _errorMessage = e.message ?? 'Google authentication failed.';
+          _errorMessage = e.message ?? 'Authentication failed.';
         }
       });
     } catch (e) {
       setState(() {
-        _errorMessage = 'An unexpected error occurred: $e';
+        _errorMessage = 'An unexpected error occurred. Please try again.';
       });
     } finally {
       if (mounted) {
@@ -95,7 +100,7 @@ class _LoginScreenState extends State<LoginScreen> {
         child: Center(
           child: SingleChildScrollView(
             child: Container(
-              width: 400,
+              width: 420,
               padding: const EdgeInsets.all(32.0),
               margin: const EdgeInsets.symmetric(horizontal: 16),
               decoration: BoxDecoration(
@@ -104,8 +109,8 @@ class _LoginScreenState extends State<LoginScreen> {
                 boxShadow: const [
                   BoxShadow(
                     color: Colors.black26,
-                    blurRadius: 16,
-                    offset: Offset(0, 6),
+                    blurRadius: 18,
+                    offset: Offset(0, 8),
                   ),
                 ],
               ),
@@ -130,53 +135,58 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 6),
                   const Text(
-                    "Barrage Operations & Discharge Monitoring",
+                    "Barrage Discharge & Operations Login",
                     textAlign: TextAlign.center,
                     style: TextStyle(color: Colors.grey, fontSize: 13),
                   ),
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 28),
 
-                  // Google Sign-In Button
-                  OutlinedButton(
-                    onPressed: _isLoading ? null : _handleGoogleSignIn,
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      side: const BorderSide(color: Color(0xFFDADCE0), width: 1.5),
-                      shape: RoundedRectangleBorder(
+                  // Email / Gmail Input
+                  TextField(
+                    controller: _emailController,
+                    keyboardType: TextInputType.emailAddress,
+                    decoration: InputDecoration(
+                      labelText: "Operator Gmail Address",
+                      hintText: "example@gmail.com",
+                      filled: true,
+                      fillColor: Colors.grey[100],
+                      prefixIcon: const Icon(Icons.email_outlined, color: Color(0xFF1E3A8A)),
+                      border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide.none,
                       ),
-                      backgroundColor: Colors.white,
                     ),
-                    child: _isLoading
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Image.network(
-                                'https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg',
-                                height: 22,
-                                width: 22,
-                                errorBuilder: (_, __, ___) => const Icon(Icons.account_circle, color: Colors.red),
-                              ),
-                              const SizedBox(width: 12),
-                              const Text(
-                                "Sign in with Google",
-                                style: TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w600,
-                                  color: Color(0xFF3C4043),
-                                ),
-                              ),
-                            ],
-                          ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Password Input
+                  TextField(
+                    controller: _passController,
+                    obscureText: _obscurePassword,
+                    onSubmitted: (_) => _handleLogin(),
+                    decoration: InputDecoration(
+                      labelText: "Password",
+                      filled: true,
+                      fillColor: Colors.grey[100],
+                      prefixIcon: const Icon(Icons.lock_outline, color: Color(0xFF1E3A8A)),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                          color: Colors.grey,
+                        ),
+                        onPressed: () {
+                          setState(() => _obscurePassword = !_obscurePassword);
+                        },
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
                   ),
 
                   if (_errorMessage.isNotEmpty) ...[
-                    const SizedBox(height: 18),
+                    const SizedBox(height: 14),
                     Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
@@ -195,11 +205,39 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ],
 
-                  const SizedBox(height: 28),
+                  const SizedBox(height: 24),
+
+                  // Login Button
+                  ElevatedButton(
+                    onPressed: _isLoading ? null : _handleLogin,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF1E3A8A),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    child: _isLoading
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Text(
+                            "Sign In",
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                          ),
+                  ),
+
+                  const SizedBox(height: 20),
                   const Text(
-                    "Authorized operators only",
+                    "Contact Barrage Supervisor for access credentials",
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.grey, fontSize: 12),
+                    style: TextStyle(color: Colors.grey, fontSize: 11),
                   ),
                 ],
               ),
