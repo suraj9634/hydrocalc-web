@@ -53,7 +53,7 @@ E Flow pipe : ${eflowPipeDischarge.toStringAsFixed(2)} cumecs
 🔹Early warning system
 1. *Dooni - cumecs*
 2. *Jakhol - cumecs*
-3. Taluka  - cumecs*
+3. *Taluka  - cumecs*
 *EWS Total - cumecs* 
 ◇Weather : *$weather*''';
   }
