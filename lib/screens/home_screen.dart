@@ -5,6 +5,7 @@ import 'history_screen.dart';
 import 'daily_summary_screen.dart';
 import 'analytics_screen.dart';
 import 'login_screen.dart';
+import '../main.dart'; // Adjust path if home_screen.dart is inside lib/screens/
 
 class HomePage extends StatelessWidget {
   final String currentRole;
@@ -12,13 +13,37 @@ class HomePage extends StatelessWidget {
   const HomePage({super.key, this.currentRole = 'Group A'});
 
   Future<void> _handleLogout(BuildContext context) async {
-    await FirebaseAuth.instance.signOut();
-    if (!context.mounted) return;
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(builder: (context) => const LoginScreen()),
-      (route) => false,
+    final bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Confirm Logout"),
+        content: const Text("Are you sure you want to end your shift and log out?"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text("Cancel"),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red.shade700,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text("Logout"),
+          ),
+        ],
+      ),
     );
+
+    if (confirm == true) {
+      await FirebaseAuth.instance.signOut();
+      if (!context.mounted) return;
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (context) => const LoginScreen()),
+        (route) => false,
+      );
+    }
   }
 
   @override
@@ -34,12 +59,8 @@ class HomePage extends StatelessWidget {
         backgroundColor: const Color(0xFF1E3A8A),
         foregroundColor: Colors.white,
         elevation: 2,
-        actions: [
-          IconButton(
-            tooltip: "Logout",
-            icon: const Icon(Icons.logout),
-            onPressed: () => _handleLogout(context),
-          ),
+        actions: const [
+          SyncStatusBadge(),
         ],
       ),
       body: SafeArea(
@@ -51,7 +72,7 @@ class HomePage extends StatelessWidget {
               child: Column(
                 children: [
                   const SizedBox(height: 10),
-                  
+
                   // Header Card with NMHPS & Active Role
                   Container(
                     width: double.infinity,
@@ -166,6 +187,34 @@ class HomePage extends StatelessWidget {
                       ],
                     ),
                   ),
+
+                  const SizedBox(height: 16),
+
+                  // Bottom Center Logout Button
+                  SizedBox(
+                    width: 220,
+                    height: 42,
+                    child: OutlinedButton.icon(
+                      onPressed: () => _handleLogout(context),
+                      icon: const Icon(Icons.logout, color: Colors.red, size: 18),
+                      label: const Text(
+                        "Sign Out / Logout",
+                        style: TextStyle(
+                          color: Colors.red,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: Colors.red, width: 1.5),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 14),
 
                   const Text(
                     "HydroCalc Pro • Version 1.0",
