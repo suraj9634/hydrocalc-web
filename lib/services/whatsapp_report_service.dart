@@ -50,6 +50,11 @@ E Flow pipe : ${eflowPipeDischarge.toStringAsFixed(2)} cumecs
 🔹Last Silt Sample Taken : Barrage 
 *$finalConcDateTime*
 🔹Concentration:  *${concentrationController.text} ppm* 
+🔹Early warning system
+1. *Dooni - cumecs*
+2. *Jakhol - cumecs*
+3. Taluka  - cumecs*
+*EWS Total - cumecs* 
 ◇Weather : *$weather*''';
   }
 
