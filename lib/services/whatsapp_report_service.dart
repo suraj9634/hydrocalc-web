@@ -45,7 +45,7 @@ FDRG: ${fdrgDischarge.toStringAsFixed(2)} Cumecs
 SFT 1&2 : ${sftDischarge.toStringAsFixed(2)} Cumecs 
 Fish Pass : ${fishPassDischarge.toStringAsFixed(2)} cumecs
 E Flow pipe : ${eflowPipeDischarge.toStringAsFixed(2)} cumecs
-🔹Last Year Maximum Discharge for the Month of August '2025 = 776.91 cumecs
+🔹Last Year Maximum Discharge for the Month of September '2025 = 778.98 cumecs
 🔹Visual Debris Near Trash Rack: ** 
 🔹Last Silt Sample Taken : Barrage 
 *$finalConcDateTime*
@@ -103,7 +103,7 @@ Date: *$dateStr*
 8. Barrage Top Level: 1269.50m
 9. Current River Discharge (Inflow): *${inflow.toStringAsFixed(2)} cumecs*
 10. *Outflow Through Barrage: ${barrageOutflow.toStringAsFixed(2)} cumecs* 
-11. Last Year Maximum Discharge for the Month of August '2025 = 776.91 cumecs
+11. Last Year Maximum Discharge for the Month of September '2025 = 778.98 cumecs
 12. Weather: *$weather*''';
   }
 }
