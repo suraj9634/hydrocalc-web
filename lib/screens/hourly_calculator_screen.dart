@@ -5,7 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../widgets/input_field.dart';
-import '../services/gate_rating_service.dart';
+import '../services/radial.dart'; // Uses GateRatingService and RatingChartType
 import 'package:hydrocalc/services/fishpass_pipe_service.dart';
 import 'package:hydrocalc/services/fishpass_channel_service.dart';
 import '../services/eflow_service.dart';
@@ -26,6 +26,9 @@ class HourlyCalculatorScreen extends StatefulWidget {
 }
 
 class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
+  // Chart Selection: New NMHPS 60 MW Chart or Legacy Table
+  RatingChartType _selectedChart = RatingChartType.newChart;
+
   @override
   void initState() {
     super.initState();
@@ -272,9 +275,11 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
       return 0.0;
     }
 
+    // Pass the active rating chart enum to GateRatingService
     double gatedDischarge = GateRatingService.getDischarge(
       reservoirLevel: reservoirLevel,
       gateOpeningMm: openingMm,
+      chartType: _selectedChart,
     );
 
     double freeflowDischarge = FreeflowService.getDischarge(
@@ -335,8 +340,11 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
 
     desiltingLevelDifference = round2Dec(currentLevel - desiltingLevel);
 
-    double gateReservoirLevel =
-        round2Dec(reservoirLevelController.text);
+    // Fallback: If "Reservoir Level for Other Discharges" is empty, use currentLevel
+    double gateReservoirLevel = round2Dec(reservoirLevelController.text);
+    if (gateReservoirLevel == 0.0) {
+      gateReservoirLevel = current;
+    }
 
     if (gateReservoirLevel < 1263) {
       factorF = 9.06;
@@ -469,6 +477,9 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
       "date": formattedDate,
       "time": hourlyTimeString,
       "timestamp": DateTime.now().toIso8601String(),
+      "ratingChartUsed": _selectedChart == RatingChartType.newChart
+          ? "60MW_NMHPS_New"
+          : "Legacy_Table",
       "currentLevel": round2Dec(currentLevelController.text),
       "previousLevel": round2Dec(previousLevelController.text),
       "desiltingLevel": round2Dec(desiltingLevelController.text),
@@ -641,6 +652,64 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
               ),
             ),
             const SizedBox(height: 20),
+
+            // Rating Chart Model Switcher
+            Card(
+              color: Colors.blue.shade50,
+              elevation: 2,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: BorderSide(color: Colors.blue.shade200),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(14.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.tune, color: Color(0xFF1E3A8A), size: 20),
+                        SizedBox(width: 8),
+                        Text(
+                          "Radial Gate Discharge Rating Chart",
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                            color: Color(0xFF1E3A8A),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Center(
+                      child: SegmentedButton<RatingChartType>(
+                        segments: const [
+                          ButtonSegment<RatingChartType>(
+                            value: RatingChartType.newChart,
+                            label: Text("60 MW Chart (EL 1261-1267m)"),
+                            icon: Icon(Icons.verified),
+                          ),
+                          ButtonSegment<RatingChartType>(
+                            value: RatingChartType.legacy,
+                            label: Text("Legacy Table"),
+                            icon: Icon(Icons.history),
+                          ),
+                        ],
+                        selected: {_selectedChart},
+                        onSelectionChanged: (Set<RatingChartType> newSelection) {
+                          setState(() {
+                            _selectedChart = newSelection.first;
+                          });
+                          calculateDischarge();
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 15),
+
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(12),
@@ -775,11 +844,6 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
             ),
             const SizedBox(height: 30),
             sectionTitle("Radial Gates"),
-            const Text(
-              "Radial Gate Discharge",
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 20),
             RadialGateCard(
               label: "RG-1 Status",
               openingController: rg1Controller,
