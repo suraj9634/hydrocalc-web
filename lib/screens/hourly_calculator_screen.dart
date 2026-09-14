@@ -5,7 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../widgets/input_field.dart';
-import '../services/radial.dart'; // Uses GateRatingService and RatingChartType
+import '../services/radial.dart';
 import 'package:hydrocalc/services/fishpass_pipe_service.dart';
 import 'package:hydrocalc/services/fishpass_channel_service.dart';
 import '../services/eflow_service.dart';
@@ -26,7 +26,6 @@ class HourlyCalculatorScreen extends StatefulWidget {
 }
 
 class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
-  // Chart Selection: New NMHPS 60 MW Chart or Legacy Table
   RatingChartType _selectedChart = RatingChartType.newChart;
 
   @override
@@ -54,12 +53,50 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
 
   String selectedWeather = 'cloudy';
 
-  // 2-Decimal Precision Helper
   double round2Dec(dynamic value) {
     if (value == null) return 0.00;
     if (value is num) return double.parse(value.toStringAsFixed(2));
     double? parsed = double.tryParse(value.toString());
     return parsed != null ? double.parse(parsed.toStringAsFixed(2)) : 0.00;
+  }
+
+  // Factor F matrix accounting for single-tier ranges and dual-tier crossing
+  double _calculateFactorF(double prev, double curr) {
+    bool inRange(double val, double min, double max) => val >= min && val <= max;
+
+    // 1. Both levels lie in the same range
+    if (inRange(prev, 1265.0, 1267.0) && inRange(curr, 1265.0, 1267.0)) {
+      return 15.25;
+    }
+    if (inRange(prev, 1263.0, 1265.0) && inRange(curr, 1263.0, 1265.0)) {
+      return 11.74;
+    }
+    if (inRange(prev, 1261.0, 1263.0) && inRange(curr, 1261.0, 1263.0)) {
+      return 9.06;
+    }
+    if (inRange(prev, 1254.0, 1261.0) && inRange(curr, 1254.0, 1261.0)) {
+      return 3.93;
+    }
+
+    // 2. Transition between ranges (Vice-Versa)
+    if ((inRange(prev, 1265.0, 1267.0) && inRange(curr, 1263.0, 1265.0)) ||
+        (inRange(curr, 1265.0, 1267.0) && inRange(prev, 1263.0, 1265.0))) {
+      return 13.50;
+    }
+    if ((inRange(prev, 1263.0, 1265.0) && inRange(curr, 1261.0, 1263.0)) ||
+        (inRange(curr, 1263.0, 1265.0) && inRange(prev, 1261.0, 1263.0))) {
+      return 10.40;
+    }
+    if ((inRange(prev, 1261.0, 1263.0) && inRange(curr, 1254.0, 1261.0)) ||
+        (inRange(curr, 1261.0, 1263.0) && inRange(prev, 1254.0, 1261.0))) {
+      return 6.50;
+    }
+
+    // Edge boundary conditions
+    if (curr > 1267.0 || prev > 1267.0) return 15.25;
+    if (curr < 1254.0 || prev < 1254.0) return 3.93;
+
+    return 9.06;
   }
 
   Future<void> autoFetchPreviousLevel() async {
@@ -133,10 +170,8 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
                 String report = WhatsappReportService.formatReport1(
                   date: selectedDate,
                   time: hourlyTimeString,
-                  reservoirLevel:
-                      round2Dec(currentLevelController.text),
-                  desiltingLevel:
-                      round2Dec(desiltingLevelController.text),
+                  reservoirLevel: round2Dec(currentLevelController.text),
+                  desiltingLevel: round2Dec(desiltingLevelController.text),
                   downstreamLevel: 0.0,
                   netHeadLoss: round2Dec(desiltingLevelDifference),
                   averageHourlyLoad: round2Dec(loadController.text),
@@ -158,12 +193,9 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
             ),
             const Divider(),
             ListTile(
-              leading:
-                  const Icon(Icons.water_drop_outlined, color: Colors.blue),
-              title:
-                  const Text("Format 2: UPSTREAM & DOWNSTREAM DISCHARGE REPORT"),
-              subtitle:
-                  const Text("River discharge, outflow, machine discharge"),
+              leading: const Icon(Icons.water_drop_outlined, color: Colors.blue),
+              title: const Text("Format 2: UPSTREAM & DOWNSTREAM DISCHARGE REPORT"),
+              subtitle: const Text("River discharge, outflow, machine discharge"),
               onTap: () {
                 Navigator.pop(context);
                 String report2 = WhatsappReportService.formatReport2(
@@ -172,8 +204,7 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
                   riverDischarge: round2Dec(inflowDischarge),
                   totalBarrageOutflow: round2Dec(barrageWaterRelease),
                   powerhouseDischarge: round2Dec(powerHouseDischarge),
-                  reservoirLevel:
-                      round2Dec(currentLevelController.text),
+                  reservoirLevel: round2Dec(currentLevelController.text),
                   weather: selectedWeather,
                 );
                 _copyToClipboard(context, report2, "Format 2");
@@ -189,8 +220,7 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
                 String report3 = WhatsappReportService.formatReport3(
                   date: selectedDate,
                   time: hourlyTimeString,
-                  reservoirLevel:
-                      round2Dec(currentLevelController.text),
+                  reservoirLevel: round2Dec(currentLevelController.text),
                   inflow: round2Dec(inflowDischarge),
                   barrageOutflow: round2Dec(barrageWaterRelease),
                   weather: selectedWeather,
@@ -208,14 +238,12 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
     Clipboard.setData(ClipboardData(text: text));
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(
-            "$formatName copied to clipboard! Ready to paste in WhatsApp."),
+        content: Text("$formatName copied to clipboard! Ready to paste in WhatsApp."),
         backgroundColor: Colors.green,
       ),
     );
   }
 
-  // Controllers
   final previousLevelController = TextEditingController();
   final currentLevelController = TextEditingController();
   final desiltingLevelController = TextEditingController();
@@ -244,7 +272,6 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
   final rg3FreeflowOpeningController = TextEditingController();
   final concentrationController = TextEditingController();
 
-  // Results
   double desiltingLevelDifference = 0.0;
   double powerHouseDischarge = 0.0;
   double factorF = 0.0;
@@ -275,7 +302,6 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
       return 0.0;
     }
 
-    // Pass the active rating chart enum to GateRatingService
     double gatedDischarge = GateRatingService.getDischarge(
       reservoirLevel: reservoirLevel,
       gateOpeningMm: openingMm,
@@ -335,28 +361,17 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
   void calculateDischarge() {
     final previous = round2Dec(previousLevelController.text);
     final current = round2Dec(currentLevelController.text);
-    final currentLevel = round2Dec(currentLevelController.text);
     final desiltingLevel = round2Dec(desiltingLevelController.text);
 
-    desiltingLevelDifference = round2Dec(currentLevel - desiltingLevel);
+    desiltingLevelDifference = round2Dec(current - desiltingLevel);
 
-    // Fallback: If "Reservoir Level for Other Discharges" is empty, use currentLevel
     double gateReservoirLevel = round2Dec(reservoirLevelController.text);
     if (gateReservoirLevel == 0.0) {
       gateReservoirLevel = current;
     }
 
-    if (gateReservoirLevel < 1263) {
-      factorF = 9.06;
-    } else if (gateReservoirLevel == 1263) {
-      factorF = (9.06 + 11.74) / 2;
-    } else if (gateReservoirLevel < 1265) {
-      factorF = 11.74;
-    } else if (gateReservoirLevel == 1265) {
-      factorF = (11.74 + 15.25) / 2;
-    } else {
-      factorF = 15.25;
-    }
+    // Determine Factor F based on the matrix
+    factorF = _calculateFactorF(previous, current);
 
     final load = round2Dec(loadController.text);
 
@@ -438,6 +453,7 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
       gateOpeningMm: round2Dec(fdrgController.text),
     ));
 
+    // Storage Correction calculation
     double levelDifference = (current - previous).abs();
     storageCorrection = round2Dec(levelDifference * factorF);
 
@@ -453,11 +469,15 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
 
     totalOutflowDischarge = round2Dec(powerHouseDischarge + barrageWaterRelease);
 
+    // Apply storage correction based on level rise/fall
     if (current > previous) {
+      // Level increased: Added to total discharge[cite: 3]
       inflowDischarge = round2Dec(totalOutflowDischarge + storageCorrection);
     } else if (current < previous) {
+      // Level decreased: Subtracted from total discharge[cite: 3]
       inflowDischarge = round2Dec(totalOutflowDischarge - storageCorrection);
     } else {
+      // Steady level: Inflow equals Outflow[cite: 3]
       inflowDischarge = totalOutflowDischarge;
     }
 
@@ -483,6 +503,11 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
       "currentLevel": round2Dec(currentLevelController.text),
       "previousLevel": round2Dec(previousLevelController.text),
       "desiltingLevel": round2Dec(desiltingLevelController.text),
+      "factorFUsed": factorF,
+      "storageCorrection": storageCorrection,
+      "levelChange": round2Dec(currentLevelController.text) > round2Dec(previousLevelController.text)
+          ? "INCREASE"
+          : (round2Dec(currentLevelController.text) < round2Dec(previousLevelController.text) ? "DECREASE" : "STEADY"),
       "avgLoad": round2Dec(loadController.text),
       "powerHouseDischarge": round2Dec(powerHouseDischarge),
       "rg1": round2Dec(rg1Discharge),
@@ -617,6 +642,10 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final prev = round2Dec(previousLevelController.text);
+    final curr = round2Dec(currentLevelController.text);
+    final String correctionSign = curr > prev ? "(+) Added" : (curr < prev ? "(-) Subtracted" : "(0) Neutral");
+
     return Scaffold(
       appBar: AppBar(
         title: const Text("Hourly Calculator",
@@ -653,7 +682,6 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
             ),
             const SizedBox(height: 20),
 
-            // Rating Chart Model Switcher
             Card(
               color: Colors.blue.shade50,
               elevation: 2,
@@ -1178,7 +1206,16 @@ class _HourlyCalculatorScreenState extends State<HourlyCalculatorScreen> {
                         "TOTAL OUTFLOW DISCHARGE",
                         barrageWaterRelease + powerHouseDischarge),
                     const Divider(),
-                    resultRow("Reservoir calculation", storageCorrection),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text("Storage Correction [F = $factorF] $correctionSign"),
+                          Text("${round2Dec(storageCorrection).toStringAsFixed(2)} m³/s"),
+                        ],
+                      ),
+                    ),
                     const Divider(),
                     Text(
                       "INFLOW DISCHARGE = ${inflowDischarge.toStringAsFixed(2)} m³/s",

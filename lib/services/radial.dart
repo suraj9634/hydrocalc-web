@@ -63,7 +63,7 @@ class GateRatingService {
   // ==========================================
   static const List<double> newReservoirLevels = [
     1261.00, 1261.50, 1262.00, 1262.50, 1263.00, 1263.50,
-    1264.00, 1264.50, 1265.00, 1265.50, 1266.00, 1266.50, 1267.00,
+    1264.00, 1264.50, 1265.00, 1265.50, 1266.00, 1266.50, 1267.00,1267.50, 1268.00,
   ];
 
   static final Map<double, List<double>> newDischargeTable = {
@@ -89,13 +89,14 @@ class GateRatingService {
     7.50: [371.4, 411.6, 451.9, 478.7, 503.9, 527.8, 550.6, 572.5, 593.6, 614.0, 633.7, 652.8, 671.4],
     8.00: [371.4, 411.6, 453.0, 493.0, 520.9, 547.2, 572.2, 596.0, 618.9, 640.9, 662.1, 682.7, 702.6],
   };
-  
+
   static double _interpolate(
     double x,
     double x1,
     double x2,
     double y1,
     double y2,
+
   ) {
     if (x1 == x2) return y1;
     return y1 + ((x - x1) / (x2 - x1)) * (y2 - y1);

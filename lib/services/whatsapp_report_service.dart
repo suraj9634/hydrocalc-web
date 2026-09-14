@@ -45,7 +45,7 @@ FDRG: ${fdrgDischarge.toStringAsFixed(2)} Cumecs
 SFT 1&2 : ${sftDischarge.toStringAsFixed(2)} Cumecs 
 Fish Pass : ${fishPassDischarge.toStringAsFixed(2)} cumecs
 E Flow pipe : ${eflowPipeDischarge.toStringAsFixed(2)} cumecs
-🔹Last Year Maximum Discharge for the Month of September '2025 = 778.98 cumecs
+🔹Last Year Maximum Discharge for the Month of September *'2025 = 778.98 cumecs*
 🔹Visual Debris Near Trash Rack: ** 
 🔹Last Silt Sample Taken : Barrage 
 *$finalConcDateTime*
