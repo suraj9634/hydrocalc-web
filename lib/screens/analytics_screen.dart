@@ -949,7 +949,45 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
     return val < 0 ? 0.0 : val;
   }
 
-  // TAB 1: Fetch exact hourly rows for selected dates from Firestore
+  Map<String, double> _calculateYBounds(List<LineChartBarData> lines) {
+    double? minVal;
+    double? maxVal;
+
+    for (final line in lines) {
+      for (final spot in line.spots) {
+        if (minVal == null || spot.y < minVal) minVal = spot.y;
+        if (maxVal == null || spot.y > maxVal) maxVal = spot.y;
+      }
+    }
+
+    if (minVal == null || maxVal == null) {
+      return {'minY': 0.0, 'maxY': 100.0, 'interval': 20.0};
+    }
+
+    if (minVal == maxVal) {
+      double padding = minVal == 0 ? 10.0 : (minVal * 0.15);
+      return {
+        'minY': (minVal - padding).clamp(0.0, double.infinity),
+        'maxY': maxVal + padding,
+        'interval': (padding / 2).clamp(1.0, double.infinity),
+      };
+    }
+
+    double delta = maxVal - minVal;
+    double padding = delta * 0.15;
+
+    double calculatedMinY = (minVal - padding).clamp(0.0, double.infinity);
+    double calculatedMaxY = maxVal + padding;
+    double calculatedInterval =
+        ((calculatedMaxY - calculatedMinY) / 5).clamp(1.0, double.infinity);
+
+    return {
+      'minY': double.parse(calculatedMinY.toStringAsFixed(1)),
+      'maxY': double.parse(calculatedMaxY.toStringAsFixed(1)),
+      'interval': double.parse(calculatedInterval.toStringAsFixed(1)),
+    };
+  }
+
   Future<void> _fetchAllSelectedDatesData() async {
     setState(() => _isLoading = true);
     _multiDateData.clear();
@@ -972,7 +1010,6 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
     if (mounted) setState(() => _isLoading = false);
   }
 
-  // TAB 2: Particular Month Daily Averages
   Future<void> _fetchParticularMonthData() async {
     setState(() => _isDailyMonthLoading = true);
     _dailyAggregatedData.clear();
@@ -1005,7 +1042,6 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
     if (mounted) setState(() => _isDailyMonthLoading = false);
   }
 
-  // TAB 3: Multi-Month Daily Aggregations
   Future<void> _fetchMultiMonthData() async {
     setState(() => _isMultiMonthLoading = true);
     _multiMonthData.clear();
@@ -1049,7 +1085,6 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
     if (mounted) setState(() => _isMultiMonthLoading = false);
   }
 
-  // TAB 4: Single Year Monthly Trend
   Future<void> _fetchYearlyData() async {
     setState(() => _isMonthlyLoading = true);
     _monthlyAggregatedData.clear();
@@ -1060,7 +1095,6 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
     try {
       for (int i = 0; i < months.length; i++) {
         String monthStr = (i + 1).toString().padLeft(2, '0');
-        // Sample mid-month (15th) reading or aggregate day-15 for the year
         String sampleDate = "15-$monthStr-$_selectedYear";
         final snapshot = await FirebaseFirestore.instance
             .collection('barrage_readings')
@@ -1081,7 +1115,6 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
     if (mounted) setState(() => _isMonthlyLoading = false);
   }
 
-  // TAB 5: Multi-Year Comparison
   Future<void> _fetchMultiYearData() async {
     setState(() => _isMultiYearLoading = true);
     _multiYearData.clear();
@@ -1296,7 +1329,6 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
     );
   }
 
-  // --- TAB 1: Multi-Date ---
   Widget _buildMultiDateView() {
     List<LineChartBarData> activeLines = [];
     int colorIndex = 0;
@@ -1388,7 +1420,8 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : _multiDateData.isEmpty
-                    ? const Center(child: Text("No readings found for selected dates."))
+                    ? const Center(
+                        child: Text("No readings found for selected dates."))
                     : _buildLineChart(activeLines, 23, "Time of Day (Hours)"),
           ),
           const SizedBox(height: 16),
@@ -1407,7 +1440,6 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
     );
   }
 
-  // --- TAB 2: Particular Month Daily Trend ---
   Widget _buildParticularMonthView() {
     List<String> monthNames = [
       'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'
@@ -1484,7 +1516,6 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
     );
   }
 
-  // --- TAB 3: Multi-Month Comparison ---
   Widget _buildMultiMonthView() {
     List<String> monthNames = [
       'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
@@ -1574,7 +1605,6 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
     );
   }
 
-  // --- TAB 4: Single Year Monthly Trend ---
   Widget _buildMonthlyYearlyView() {
     List<String> months = [
       'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
@@ -1629,7 +1659,6 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
     );
   }
 
-  // --- TAB 5: Multi-Year Comparison ---
   Widget _buildMultiYearView() {
     List<String> months = [
       'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
@@ -1750,15 +1779,24 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
 
   Widget _buildLineChart(
       List<LineChartBarData> lines, double maxX, String xTitle) {
+    final bounds = _calculateYBounds(lines);
+    final double dynamicMinY = bounds['minY']!;
+    final double dynamicMaxY = bounds['maxY']!;
+    final double dynamicInterval = bounds['interval']!;
+
     return Row(
       children: [
         RotatedBox(
-            quarterTurns: 3,
-            child: Text(_availableParameters[_selectedParameter]!,
-                style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12,
-                    color: Colors.grey))),
+          quarterTurns: 3,
+          child: Text(
+            _availableParameters[_selectedParameter]!,
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 12,
+              color: Colors.grey,
+            ),
+          ),
+        ),
         const SizedBox(width: 8),
         Expanded(
           child: Column(
@@ -1766,26 +1804,48 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
               Expanded(
                 child: LineChart(
                   LineChartData(
-                    gridData:
-                        const FlGridData(show: true, drawVerticalLine: true),
+                    gridData: FlGridData(
+                      show: true,
+                      drawVerticalLine: true,
+                      horizontalInterval: dynamicInterval,
+                    ),
                     titlesData: FlTitlesData(
                       bottomTitles: AxisTitles(
                         sideTitles: SideTitles(
-                            showTitles: true,
-                            reservedSize: 32,
-                            interval: maxX > 15 ? 5 : 1,
-                            getTitlesWidget: (value, meta) {
-                              return Padding(
-                                  padding: const EdgeInsets.only(top: 8.0),
-                                  child: Text(value.toInt().toString(),
-                                      style: const TextStyle(
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.bold)));
-                            }),
+                          showTitles: true,
+                          reservedSize: 32,
+                          interval: maxX > 15 ? 5 : 1,
+                          getTitlesWidget: (value, meta) {
+                            return Padding(
+                              padding: const EdgeInsets.only(top: 8.0),
+                              child: Text(
+                                value.toInt().toString(),
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
                       ),
-                      leftTitles: const AxisTitles(
-                          sideTitles:
-                              SideTitles(showTitles: true, reservedSize: 45)),
+                      leftTitles: AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: true,
+                          reservedSize: 45,
+                          interval: dynamicInterval,
+                          getTitlesWidget: (value, meta) {
+                            return Text(
+                              value.toStringAsFixed(1),
+                              style: const TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.black87,
+                              ),
+                            );
+                          },
+                        ),
+                      ),
                       topTitles: const AxisTitles(
                           sideTitles: SideTitles(showTitles: false)),
                       rightTitles: const AxisTitles(
@@ -1793,20 +1853,25 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                     ),
                     minX: 0,
                     maxX: maxX,
-                    minY: 0,
+                    minY: dynamicMinY,
+                    maxY: dynamicMaxY,
                     borderData: FlBorderData(
-                        show: true,
-                        border: Border.all(color: Colors.grey.shade300)),
+                      show: true,
+                      border: Border.all(color: Colors.grey.shade300),
+                    ),
                     lineBarsData: lines,
                   ),
                 ),
               ),
               const SizedBox(height: 8),
-              Text(xTitle,
-                  style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
-                      color: Colors.grey)),
+              Text(
+                xTitle,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                  color: Colors.grey,
+                ),
+              ),
             ],
           ),
         ),
